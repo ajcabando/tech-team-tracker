@@ -66,4 +66,16 @@ describe('detectTrips', () => {
     // Without outlier filtering this jump alone would add thousands of kilometres.
     expect(trips[0].distanceMeters).toBeLessThan(5000);
   });
+
+  it('does not accept a spiked reported speed into maxSpeed', () => {
+    // Realistic city geometry (~tens of km/h) but one point claims 183 km/h.
+    const points = drive(10, { lat: 10.3, lon: 123.9 }).map((point, index) => ({
+      ...point,
+      speed: index === 5 ? 183 : 40,
+    }));
+    const trips = detectTrips(points);
+    expect(trips).toHaveLength(1);
+    expect(trips[0].maxSpeed).toBeLessThanOrEqual(100);
+    expect(trips[0].maxSpeed).toBeLessThan(183);
+  });
 });

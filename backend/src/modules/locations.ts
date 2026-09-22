@@ -4,7 +4,7 @@ import { db } from '../db';
 import { durableDeviceAuth, AuthedRequest } from '../auth';
 import { asyncHandler } from '../common';
 import { rateLimit } from '../middleware/rateLimit';
-import { classifyQuality, metersPerSecondToKmh } from '../services/geo';
+import { classifyQuality, metersPerSecondToKmh, MAX_PLAUSIBLE_SPEED_KMH } from '../services/geo';
 import { getTracking } from '../services/settings';
 import { computeTripsForDevice } from '../services/tripEngine';
 import { publish } from '../realtime';
@@ -40,7 +40,11 @@ locationsRouter.post('/api/locations/batch', rateLimit({ windowMs: 60_000, max: 
     latitude: point.latitude,
     longitude: point.longitude,
     // Android reports speed in m/s; the platform stores/report km/h.
-    speed: point.speed != null ? metersPerSecondToKmh(point.speed) : undefined,
+    // Drop implausible spikes (urban multipath) so lastSpeed / live map stay sane.
+    speed:
+      point.speed != null && metersPerSecondToKmh(point.speed) <= MAX_PLAUSIBLE_SPEED_KMH
+        ? metersPerSecondToKmh(point.speed)
+        : undefined,
     heading: point.heading,
     accuracy: point.accuracy,
     altitude: point.altitude,

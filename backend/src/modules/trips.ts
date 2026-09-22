@@ -5,6 +5,7 @@ import { db } from '../db';
 import { auth, roles, AuthedRequest } from '../auth';
 import { asyncHandler, audit, orgScope, paginate } from '../common';
 import { detectTrips } from '../services/trips';
+import { MAX_PLAUSIBLE_SPEED_KMH } from '../services/geo';
 
 export const tripsRouter = Router();
 
@@ -118,7 +119,9 @@ tripsRouter.post('/api/trips/process', auth, roles(UserRole.SUPERADMIN, UserRole
       endLongitude: points.at(-1)!.longitude,
       distanceMeters: segment?.distanceMeters ?? 0,
       drivingSeconds: segment?.drivingSeconds ?? Math.max(0, Math.round((points.at(-1)!.recordedAt.getTime() - points[0].recordedAt.getTime()) / 1000)),
-      maxSpeed: segment?.maxSpeed ?? Math.max(0, ...points.map((point) => point.speed ?? 0)),
+      maxSpeed:
+        segment?.maxSpeed ??
+        Math.min(MAX_PLAUSIBLE_SPEED_KMH, Math.max(0, ...points.map((point) => point.speed ?? 0))),
       averageSpeed: segment?.averageSpeed ?? 0,
       stopCount: segment?.stopCount ?? 0,
       longestStopSeconds: segment?.longestStopSeconds ?? 0,
