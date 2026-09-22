@@ -39,8 +39,7 @@ export function SettingsPage() {
   const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
-  const appBgInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState<'logo' | 'background' | 'app-background' | null>(null);
+  const [uploading, setUploading] = useState<'logo' | 'background' | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -68,7 +67,7 @@ export function SettingsPage() {
     }
   }
 
-  async function handleUpload(kind: 'logo' | 'background' | 'app-background', event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleUpload(kind: 'logo' | 'background', event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = '';
@@ -76,7 +75,7 @@ export function SettingsPage() {
     // limits surfacing as generic errors. Caps mirror the server multer limits.
     const maxBytes = kind === 'logo' ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
     if (file.size > maxBytes) {
-      const label = kind === 'logo' ? 'Logo' : kind === 'background' ? 'Login background' : 'App background';
+      const label = kind === 'logo' ? 'Logo' : 'Login background';
       setError(`${label} must be under ${Math.round(maxBytes / 1024 / 1024)} MB — this file is ${(file.size / 1024 / 1024).toFixed(1)} MB.`);
       return;
     }
@@ -86,7 +85,7 @@ export function SettingsPage() {
       const updated = (await uploadAsset(kind, file)) as Branding;
       setBranding(updated);
       await reloadBranding();
-      setMessage(`${kind === 'logo' ? 'Logo' : kind === 'background' ? 'Login background' : 'App background'} uploaded.`);
+      setMessage(`${kind === 'logo' ? 'Logo' : 'Login background'} uploaded.`);
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? `Upload failed`);
     } finally {
@@ -207,20 +206,6 @@ export function SettingsPage() {
                     </button>
                     {branding.loginBackgroundUrl && canEdit && (
                       <button type="button" className="link danger" onClick={() => setBranding({ ...branding, loginBackgroundUrl: null })}>Remove</button>
-                    )}
-                  </div>
-                </div>
-              </Field>
-              <Field label="App background" hint="Full-page backdrop behind the dashboard">
-                <div className="upload-row upload-row-bg">
-                  {branding.appBackgroundUrl && <img src={branding.appBackgroundUrl} alt="App background preview" className="upload-preview-bg" />}
-                  <input ref={appBgInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void handleUpload('app-background', event)} />
-                  <div className="upload-actions">
-                    <button type="button" className="outline" onClick={() => appBgInputRef.current?.click()} disabled={!canEdit || uploading === 'app-background'}>
-                      {uploading === 'app-background' ? 'Uploading…' : branding.appBackgroundUrl ? 'Replace background' : 'Upload background'}
-                    </button>
-                    {branding.appBackgroundUrl && canEdit && (
-                      <button type="button" className="link danger" onClick={() => setBranding({ ...branding, appBackgroundUrl: null })}>Remove</button>
                     )}
                   </div>
                 </div>

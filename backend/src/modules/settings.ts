@@ -54,7 +54,6 @@ const brandingBody = z.object({
   logoUrl: imageUrl(MAX_LOGO_CHARS).nullish(),
   faviconUrl: z.string().url().nullish(),
   loginBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
-  appBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
   supportEmail: z.string().email().nullish(),
   supportPhone: z.string().max(40).nullish(),
   timezone: z.string().min(1).max(60),
@@ -71,7 +70,6 @@ settingsRouter.post('/api/settings', auth, roles(...brandableRoles), asyncHandle
     logoUrl: parsed.data.logoUrl || null,
     faviconUrl: parsed.data.faviconUrl || null,
     loginBackgroundUrl: parsed.data.loginBackgroundUrl || null,
-    appBackgroundUrl: parsed.data.appBackgroundUrl || null,
     supportEmail: parsed.data.supportEmail || null,
     supportPhone: parsed.data.supportPhone || null,
     country: parsed.data.country || null,
@@ -92,10 +90,9 @@ const upload = multer({
   },
 });
 
-const ASSET_FIELDS: Record<string, { dbField: 'logoUrl' | 'loginBackgroundUrl' | 'appBackgroundUrl'; maxBytes: number }> = {
+const ASSET_FIELDS: Record<string, { dbField: 'logoUrl' | 'loginBackgroundUrl'; maxBytes: number }> = {
   logo: { dbField: 'logoUrl', maxBytes: MAX_LOGO_BYTES },
   background: { dbField: 'loginBackgroundUrl', maxBytes: MAX_BG_BYTES },
-  'app-background': { dbField: 'appBackgroundUrl', maxBytes: MAX_BG_BYTES },
 };
 
 settingsRouter.post('/api/settings/assets', auth, roles(...brandableRoles), upload.single('file'), asyncHandler(async (req: AuthedRequest, res) => {
@@ -104,7 +101,7 @@ settingsRouter.post('/api/settings/assets', auth, roles(...brandableRoles), uplo
 
   const kind = String(req.body.kind || '');
   const spec = ASSET_FIELDS[kind];
-  if (!spec) return res.status(400).json({ error: 'Invalid asset kind. Expected "logo", "background", or "app-background".' });
+  if (!spec) return res.status(400).json({ error: 'Invalid asset kind. Expected "logo" or "background".' });
 
   const file = req.file;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });

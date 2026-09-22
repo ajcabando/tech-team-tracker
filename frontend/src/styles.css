@@ -385,30 +385,6 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   background: var(--surface-alt);
 }
 
-/* Immersive page background (branding.appBackgroundUrl). Scoped so the default
-   theme renders byte-identically when no image is set. Sidebar, cards, topbar
-   and inputs keep their solid surfaces — only the content gaps show the image. */
-.app.has-app-bg { position: relative; }
-.app.has-app-bg::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--surface-alt) 82%, transparent), color-mix(in srgb, var(--surface-alt) 82%, transparent)),
-    var(--app-bg);
-  background-size: cover;
-  background-position: center;
-  pointer-events: none;
-}
-[data-theme='light'] .app.has-app-bg::before {
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--surface-alt) 88%, transparent), color-mix(in srgb, var(--surface-alt) 88%, transparent)),
-    var(--app-bg);
-}
-.app.has-app-bg .content { position: relative; z-index: 1; background: transparent; }
-.app.has-app-bg .sidebar,
-.app.has-app-bg .mobile-header { z-index: 1; }
 .mobile-header, .drawer-backdrop, .drawer-close { display: none; }
 .sidebar {
   width: 248px;
@@ -1304,8 +1280,6 @@ input[type='range'] { padding: 0; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .stat strong { font-size: 21px; }
   .topbar { margin: -18px -14px 18px; padding: 10px 14px; gap: 8px; }
-  /* Fixed layers jitter on mobile browsers — anchor the backdrop to the page instead. */
-  .app.has-app-bg::before { position: absolute; }
   .topbar-search { max-width: none; }
   .topbar-clock { display: none; }
   /* Bell + theme toggle already live in the mobile brand row — hide the topbar duplicates. */

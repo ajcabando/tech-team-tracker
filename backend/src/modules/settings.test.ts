@@ -38,7 +38,6 @@ const brandingBody = z.object({
   logoUrl: imageUrl(MAX_LOGO_CHARS).nullish(),
   faviconUrl: z.string().url().nullish(),
   loginBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
-  appBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
   supportEmail: z.string().email().nullish(),
   supportPhone: z.string().max(40).nullish(),
   timezone: z.string().min(1).max(60),
@@ -66,7 +65,6 @@ describe('branding schema', () => {
       logoUrl: null,
       faviconUrl: null,
       loginBackgroundUrl: null,
-      appBackgroundUrl: null,
       supportEmail: null,
       supportPhone: null,
       country: null,
@@ -85,7 +83,6 @@ describe('branding schema', () => {
       logoUrl: 'https://example.com/logo.png',
       faviconUrl: 'https://example.com/favicon.ico',
       loginBackgroundUrl: 'https://example.com/bg.webp',
-      appBackgroundUrl: 'https://example.com/app-bg.jpg',
     });
     expect(result.success).toBe(true);
   });
@@ -95,7 +92,6 @@ describe('branding schema', () => {
       ...VALID,
       logoUrl: DATA_URI,
       loginBackgroundUrl: DATA_URI,
-      appBackgroundUrl: DATA_URI,
     });
     expect(result.success).toBe(true);
   });
@@ -110,7 +106,7 @@ describe('branding schema', () => {
 
   it('rejects oversized data URIs past the upload cap', () => {
     const huge = `data:image/png;base64,${'A'.repeat(MAX_BG_CHARS)}`;
-    const result = brandingBody.safeParse({ ...VALID, appBackgroundUrl: huge });
+    const result = brandingBody.safeParse({ ...VALID, loginBackgroundUrl: huge });
     expect(result.success).toBe(false);
   });
 
