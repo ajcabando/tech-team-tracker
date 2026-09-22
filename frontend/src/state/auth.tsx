@@ -9,6 +9,7 @@ export type Branding = {
   primaryColor: string;
   secondaryColor: string;
   loginBackgroundUrl?: string | null;
+  appBackgroundUrl?: string | null;
   supportEmail?: string | null;
   supportPhone?: string | null;
   timezone?: string;

@@ -3,6 +3,8 @@ import { api, uploadAsset } from '../lib/api';
 import { AppShell, Card, ErrorNote, Field, PasswordInput, Spinner } from '../components/ui';
 import { Branding, useAuth } from '../state/auth';
 import { ThemeMode, useTheme } from '../state/theme';
+import { BUILD_INFO } from '../buildInfo';
+import { onErrorsChange, recentErrors } from '../lib/diagnostics';
 
 type Tracking = {
   movingIntervalSeconds: number;
@@ -37,7 +39,8 @@ export function SettingsPage() {
   const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState<'logo' | 'background' | null>(null);
+  const appBgInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<'logo' | 'background' | 'app-background' | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -65,17 +68,25 @@ export function SettingsPage() {
     }
   }
 
-  async function handleUpload(kind: 'logo' | 'background', event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleUpload(kind: 'logo' | 'background' | 'app-background', event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = '';
+    // Fail fast with a specific message instead of depending on proxy/backend
+    // limits surfacing as generic errors. Caps mirror the server multer limits.
+    const maxBytes = kind === 'logo' ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      const label = kind === 'logo' ? 'Logo' : kind === 'background' ? 'Login background' : 'App background';
+      setError(`${label} must be under ${Math.round(maxBytes / 1024 / 1024)} MB — this file is ${(file.size / 1024 / 1024).toFixed(1)} MB.`);
+      return;
+    }
     setUploading(kind);
     setError('');
     try {
       const updated = (await uploadAsset(kind, file)) as Branding;
       setBranding(updated);
       await reloadBranding();
-      setMessage(`${kind === 'logo' ? 'Logo' : 'Background'} uploaded.`);
+      setMessage(`${kind === 'logo' ? 'Logo' : kind === 'background' ? 'Login background' : 'App background'} uploaded.`);
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? `Upload failed`);
     } finally {
@@ -200,6 +211,20 @@ export function SettingsPage() {
                   </div>
                 </div>
               </Field>
+              <Field label="App background" hint="Full-page backdrop behind the dashboard">
+                <div className="upload-row upload-row-bg">
+                  {branding.appBackgroundUrl && <img src={branding.appBackgroundUrl} alt="App background preview" className="upload-preview-bg" />}
+                  <input ref={appBgInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void handleUpload('app-background', event)} />
+                  <div className="upload-actions">
+                    <button type="button" className="outline" onClick={() => appBgInputRef.current?.click()} disabled={!canEdit || uploading === 'app-background'}>
+                      {uploading === 'app-background' ? 'Uploading…' : branding.appBackgroundUrl ? 'Replace background' : 'Upload background'}
+                    </button>
+                    {branding.appBackgroundUrl && canEdit && (
+                      <button type="button" className="link danger" onClick={() => setBranding({ ...branding, appBackgroundUrl: null })}>Remove</button>
+                    )}
+                  </div>
+                </div>
+              </Field>
               <Field label="Timezone">
                 <input value={branding.timezone ?? ''} onChange={(event) => setBranding({ ...branding, timezone: event.target.value })} disabled={!canEdit} />
               </Field>
@@ -227,6 +252,7 @@ export function SettingsPage() {
             <Spinner label="Checking server…" />
           )}
         </Card>
+        <DiagnosticsCard />
       </div>
 
       {tracking && (
@@ -302,5 +328,50 @@ export function SettingsPage() {
         </form>
       </Card>
     </AppShell>
+  );
+}
+
+function DiagnosticsCard() {
+  const [, setTick] = useState(0);
+  useEffect(() => onErrorsChange(() => setTick((tick) => tick + 1)), []);
+  const errors = recentErrors();
+  const theme = document.documentElement.dataset.theme ?? 'unknown';
+  const report = [
+    `build=${BUILD_INFO.buildId} built=${BUILD_INFO.buildTime}`,
+    `route=${window.location.hash || '#/'} viewport=${window.innerWidth}x${window.innerHeight}`,
+    `theme=${theme} ua=${window.navigator.userAgent}`,
+    ...errors.map((entry) => `${entry.time} [${entry.kind}] ${entry.message}`),
+  ].join('\n');
+
+  return (
+    <Card
+      title="Diagnostics"
+      action={
+        <button
+          className="outline"
+          onClick={() => {
+            void navigator.clipboard?.writeText(report);
+          }}
+        >
+          Copy report
+        </button>
+      }
+    >
+      <div className="stack">
+        <div className="kv"><span>Bundle</span><strong>{BUILD_INFO.buildId} · {BUILD_INFO.buildTime === 'dev' ? 'dev' : new Date(BUILD_INFO.buildTime).toLocaleString()}</strong></div>
+        <div className="kv"><span>Viewport</span><strong>{window.innerWidth}×{window.innerHeight}</strong></div>
+        <div className="kv"><span>Theme</span><strong>{theme}</strong></div>
+        {errors.length === 0 ? (
+          <p className="muted">No client errors recorded in this session.</p>
+        ) : (
+          errors.map((entry, index) => (
+            <div className="kv" key={`${entry.time}-${index}`}>
+              <span>{entry.time} · {entry.kind}</span>
+              <strong style={{ overflowWrap: 'anywhere' }}>{entry.message}</strong>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
   );
 }

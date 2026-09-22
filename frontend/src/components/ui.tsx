@@ -455,7 +455,10 @@ export function AppShell({ children, title, subtitle, actions }: { children: Rea
   };
 
   return (
-    <div className={`app${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
+    <div
+      className={`app${collapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}${branding.appBackgroundUrl ? ' has-app-bg' : ''}`}
+      style={branding.appBackgroundUrl ? ({ '--app-bg': `url("${branding.appBackgroundUrl}")` } as React.CSSProperties) : undefined}
+    >
       <header className="mobile-header">
         <div className="mobile-brand">
           {branding.logoUrl ? <img className="brandmark-img" src={branding.logoUrl} alt="" /> : <span className="brandmark">◎</span>}

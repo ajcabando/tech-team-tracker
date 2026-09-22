@@ -11,6 +11,35 @@ export const settingsRouter = Router();
 
 const brandableRoles = [UserRole.SUPERADMIN, UserRole.ADMIN] as const;
 
+// ---------- Branding image validation + asset upload (logo / backgrounds) ----------
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const MAX_BG_BYTES = 5 * 1024 * 1024;
+// Base64 inflates binary by 4/3, plus the data-URI prefix — mirrors the multer caps
+// on the JSON save path so oversized payloads cannot bypass the upload limits.
+const MAX_LOGO_CHARS = Math.ceil(MAX_LOGO_BYTES * 4 / 3) + 64;
+const MAX_BG_CHARS = Math.ceil(MAX_BG_BYTES * 4 / 3) + 64;
+
+/**
+ * Accepts remote https URLs and data-URI images written by the asset upload
+ * endpoint. Plain `z.string().url()` rejects data URIs, which previously made
+ * every branding save fail after an upload.
+ */
+function imageUrl(maxChars: number) {
+  return z.string().max(maxChars).refine(
+    (value) => {
+      // Data URIs parse as URLs, so test that shape first before the http(s) check.
+      if (/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(value)) return true;
+      try {
+        return new URL(value).protocol === 'http:' || new URL(value).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Must be an http(s) URL or a base64 image data URI' },
+  );
+}
+
 settingsRouter.get('/api/settings', auth, asyncHandler(async (req: AuthedRequest, res) => {
   if (!req.user?.organizationId) return res.json(null);
   const { branding } = await ensureOrganizationSettings(req.user.organizationId);
@@ -22,9 +51,10 @@ const brandingBody = z.object({
   companyName: z.string().min(1).max(80),
   primaryColor: z.string().regex(/^#[0-9a-f]{6}$/i),
   secondaryColor: z.string().regex(/^#[0-9a-f]{6}$/i),
-  logoUrl: z.string().url().nullish(),
+  logoUrl: imageUrl(MAX_LOGO_CHARS).nullish(),
   faviconUrl: z.string().url().nullish(),
-  loginBackgroundUrl: z.string().url().nullish(),
+  loginBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
+  appBackgroundUrl: imageUrl(MAX_BG_CHARS).nullish(),
   supportEmail: z.string().email().nullish(),
   supportPhone: z.string().max(40).nullish(),
   timezone: z.string().min(1).max(60),
@@ -41,6 +71,7 @@ settingsRouter.post('/api/settings', auth, roles(...brandableRoles), asyncHandle
     logoUrl: parsed.data.logoUrl || null,
     faviconUrl: parsed.data.faviconUrl || null,
     loginBackgroundUrl: parsed.data.loginBackgroundUrl || null,
+    appBackgroundUrl: parsed.data.appBackgroundUrl || null,
     supportEmail: parsed.data.supportEmail || null,
     supportPhone: parsed.data.supportPhone || null,
     country: parsed.data.country || null,
@@ -52,9 +83,6 @@ settingsRouter.post('/api/settings', auth, roles(...brandableRoles), asyncHandle
 
 // ---------- Asset upload (logo / login background) ----------
 
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
-const MAX_BG_BYTES = 5 * 1024 * 1024;
-
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_BG_BYTES },
@@ -64,9 +92,10 @@ const upload = multer({
   },
 });
 
-const ASSET_FIELDS: Record<string, { dbField: 'logoUrl' | 'loginBackgroundUrl'; maxBytes: number }> = {
+const ASSET_FIELDS: Record<string, { dbField: 'logoUrl' | 'loginBackgroundUrl' | 'appBackgroundUrl'; maxBytes: number }> = {
   logo: { dbField: 'logoUrl', maxBytes: MAX_LOGO_BYTES },
   background: { dbField: 'loginBackgroundUrl', maxBytes: MAX_BG_BYTES },
+  'app-background': { dbField: 'appBackgroundUrl', maxBytes: MAX_BG_BYTES },
 };
 
 settingsRouter.post('/api/settings/assets', auth, roles(...brandableRoles), upload.single('file'), asyncHandler(async (req: AuthedRequest, res) => {
@@ -75,7 +104,7 @@ settingsRouter.post('/api/settings/assets', auth, roles(...brandableRoles), uplo
 
   const kind = String(req.body.kind || '');
   const spec = ASSET_FIELDS[kind];
-  if (!spec) return res.status(400).json({ error: 'Invalid asset kind. Expected "logo" or "background".' });
+  if (!spec) return res.status(400).json({ error: 'Invalid asset kind. Expected "logo", "background", or "app-background".' });
 
   const file = req.file;
   if (!file) return res.status(400).json({ error: 'No file uploaded' });

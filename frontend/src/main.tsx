@@ -5,6 +5,9 @@ import { AuthProvider } from './state/auth';
 import { ThemeProvider } from './state/theme';
 import { RouterProvider } from './lib/router';
 import './styles.css';
+import { installErrorCollector } from './lib/diagnostics';
+
+installErrorCollector();
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

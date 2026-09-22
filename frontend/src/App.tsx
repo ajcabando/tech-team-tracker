@@ -16,6 +16,7 @@ import { SettingsPage } from './pages/Settings';
 import { AdminPage } from './pages/Admin';
 import { AboutPage } from './pages/About';
 import { AndroidSetupPage } from './pages/AndroidSetup';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function Routes() {
   const { segments } = useRouter();
@@ -60,5 +61,9 @@ export function App() {
   }
   if (setupRequired && !user) return <SetupPage onDone={() => window.location.reload()} />;
   if (!user) return <LoginPage />;
-  return <Routes />;
+  return (
+    <ErrorBoundary>
+      <Routes />
+    </ErrorBoundary>
+  );
 }

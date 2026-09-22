@@ -165,6 +165,11 @@ async function main() {
     // 01 — login (logged out).
     await cdp.evaluate(`window.location.href = '${DASHBOARD_URL}/#/login';`, sessionId);
     await cdp.waitFor(`document.querySelector('#login-email') !== null`, sessionId);
+    if (process.env.SHOT_THEME === 'light' || process.env.SHOT_THEME === 'dark') {
+      await cdp.evaluate(`localStorage.setItem('tracker.theme', '${process.env.SHOT_THEME}'); window.location.reload();`, sessionId);
+      await cdp.waitFor(`document.querySelector('#login-email') !== null`, sessionId);
+      await sleep(1500);
+    }
     await shot('01-login.png', desktop);
 
     // Sign in through the UI (native setter so React controlled inputs update).

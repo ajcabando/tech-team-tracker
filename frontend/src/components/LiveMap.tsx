@@ -157,7 +157,7 @@ export function LiveMap({ devices = [], center, zoom = 11, route, playback, fitR
   const primary = useMemo(() => brandPrimary(), []);
 
   return (
-    <div className="map" style={{ height }}>
+    <div className="map" style={{ height: `var(--map-h, ${height}px)` }}>
       <MapContainer center={fallback} zoom={zoom} scrollWheelZoom className="leaflet-container">
         <TileLayer attribution={layer.attribution} url={layer.url} />
         {route && route.length > 1 && <Polyline positions={route} pathOptions={{ color: primary, weight: 4, opacity: 0.85 }} />}

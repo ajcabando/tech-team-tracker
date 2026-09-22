@@ -98,8 +98,8 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return (await parse(response)) as T;
 }
 
-/** Upload a file asset (logo or login background) and return the updated Branding. */
-export async function uploadAsset(kind: 'logo' | 'background', file: File): Promise<unknown> {
+/** Upload a file asset (logo, login background, or app background) and return the updated Branding. */
+export async function uploadAsset(kind: 'logo' | 'background' | 'app-background', file: File): Promise<unknown> {
   const form = new FormData();
   form.append('kind', kind);
   form.append('file', file);

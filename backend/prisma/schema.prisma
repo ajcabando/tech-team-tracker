@@ -234,6 +234,7 @@ model Branding {
   primaryColor       String       @default("#0ea5e9")
   secondaryColor     String       @default("#0f172a")
   loginBackgroundUrl String?
+  appBackgroundUrl     String?
   supportEmail       String?
   supportPhone       String?
   timezone           String       @default("UTC")

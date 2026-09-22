@@ -47,7 +47,7 @@ export function AndroidSetupPage() {
           <code>{serverUrl}</code>
         </div>
         <div className="row-actions" style={{ marginTop: 12 }}>
-          <a className="primary as-button" href="/tracker.apk" download="tracker.apk">Download APK · v0.3.2 signed</a>
+          <a className="primary as-button" href="/tracker.apk" download="tracker.apk">Download APK · v0.3.3 signed</a>
           <Link to="/about" className="outline as-button">About this release</Link>
         </div>
       </Card>

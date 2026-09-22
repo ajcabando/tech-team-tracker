@@ -27,7 +27,10 @@ export function createApp() {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: '2mb' }));
+  // 8mb accommodates branding saves carrying base64 image data URIs (backgrounds
+  // up to 5MB binary ≈ 6.8MB encoded). Per-field Zod length caps remain the real
+  // guard; this is only the transport ceiling.
+  app.use(express.json({ limit: '8mb' }));
   if (config.nodeEnv !== 'test') app.use(morgan('combined'));
   app.use(rateLimit({ windowMs: 60_000, max: 600 }));
 
