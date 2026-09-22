@@ -1,0 +1,6 @@
+<resources>
+    <!-- Window background matches the dark splash so launch never flashes white. -->
+    <color name="tracker_navy">#FF070D14</color>
+    <color name="tracker_primary">#FF2F80ED</color>
+    <color name="ic_launcher_background">#FF0B1722</color>
+</resources>

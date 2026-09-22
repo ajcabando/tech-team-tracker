@@ -1,0 +1,20 @@
+<resources>
+    <!--
+      Default label only. After pairing, the UI shows the application name configured by
+      the administrator in Settings → Branding, and that value wins everywhere the app
+      renders its own name.
+
+      The strings below are the fallbacks used before pairing and while offline. Rename
+      them (or change the configured branding in the dashboard) to rebrand the app —
+      no Kotlin changes are needed.
+    -->
+    <string name="app_name">Tech Team Tracker</string>
+    <string name="app_tagline">Track. Support. Serve.</string>
+    <string name="brand_footer_title">Tech Team Tracker</string>
+    <string name="brand_footer_subtitle">Field Team Solutions</string>
+
+    <string name="tracking_channel_name">Tracking</string>
+    <string name="tracking_channel_description">Visible location tracking indicator</string>
+
+    <string name="map_attribution">© OpenStreetMap contributors</string>
+</resources>

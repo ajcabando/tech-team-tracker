@@ -1,0 +1,295 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  MANAGER
+  DISPATCHER
+  TECHNICIAN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum DeviceStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum TripSource {
+  AUTO
+  MANUAL
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model SystemState {
+  id            String    @id
+  initialized   Boolean   @default(false)
+  initializedAt DateTime?
+  updatedAt     DateTime  @updatedAt
+}
+
+model Organization {
+  id          String             @id @default(uuid())
+  name        String
+  slug        String             @unique
+  status      OrganizationStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  users       User[]
+  technicians Technician[]
+  devices     Device[]
+  locations   Location[]
+  trips       Trip[]
+  alerts      Alert[]
+  branding    Branding?
+  tracking    TrackingSetting?
+  retention   RetentionSetting?
+}
+
+model User {
+  id             String        @id @default(uuid())
+  organizationId String?
+  name           String
+  email          String        @unique
+  phone          String?
+  passwordHash   String
+  role           UserRole      @default(ADMIN)
+  status         UserStatus    @default(ACTIVE)
+  lastLogin      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  auditLogs      AuditLog[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Technician {
+  id             String        @id @default(uuid())
+  organizationId String
+  employeeNumber String
+  name           String
+  email          String?
+  phone          String?
+  status         UserStatus    @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  devices        Device[]
+  locations      Location[]
+  trips          Trip[]
+  alerts         Alert[]
+  @@unique([organizationId, employeeNumber])
+  @@index([organizationId, status])
+}
+
+model Device {
+  id             String       @id @default(uuid())
+  organizationId String
+  technicianId   String?
+  deviceUuid     String       @unique
+  deviceName     String
+  manufacturer   String?
+  model          String?
+  androidVersion String?
+  appVersion     String?
+  credentialHash String?      @unique
+  deviceAdminSecretHash String?
+  adminUnlockedUntil    DateTime?
+  status         DeviceStatus @default(PENDING)
+  batteryLevel   Int?
+  lastLatitude   Float?
+  lastLongitude  Float?
+  lastSpeed      Float?
+  lastAccuracy   Float?
+  lastHeading    Float?
+  lastSeen       DateTime?
+  unpairedAt     DateTime?
+  iconType       String       @default("pin")
+  iconColor      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  technician     Technician?  @relation(fields: [technicianId], references: [id])
+  locations      Location[]
+  pairingCodes   PairingCode[]
+  alerts         Alert[]
+  @@index([organizationId, status])
+}
+
+model PairingCode {
+  id           String   @id @default(uuid())
+  deviceId     String
+  deviceIdText String
+  codeHash     String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime @default(now())
+  device       Device   @relation(fields: [deviceId], references: [id])
+  @@index([codeHash, expiresAt])
+}
+
+model Location {
+  id             String       @id @default(uuid())
+  deviceId       String
+  technicianId   String
+  organizationId String
+  recordedAt     DateTime
+  latitude       Float
+  longitude      Float
+  speed          Float?
+  heading        Float?
+  accuracy       Float?
+  altitude       Float?
+  battery        Int?
+  networkState   String?
+  quality        String       @default("GOOD")
+  syncedAt       DateTime     @default(now())
+  device         Device       @relation(fields: [deviceId], references: [id])
+  technician     Technician   @relation(fields: [technicianId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  @@unique([deviceId, recordedAt])
+  @@index([organizationId, recordedAt])
+  @@index([technicianId, recordedAt])
+}
+
+model Trip {
+  id                  String         @id @default(uuid())
+  organizationId      String
+  technicianId        String
+  deviceId            String
+  source              TripSource     @default(AUTO)
+  startedAt           DateTime
+  endedAt             DateTime?
+  startLatitude       Float
+  startLongitude      Float
+  endLatitude         Float?
+  endLongitude        Float?
+  distanceMeters      Float          @default(0)
+  drivingSeconds      Int            @default(0)
+  maxSpeed            Float          @default(0)
+  averageSpeed        Float          @default(0)
+  stopCount           Int            @default(0)
+  longestStopSeconds  Int            @default(0)
+  pointCount          Int            @default(0)
+  mapMatchedRoute     Json?
+  createdAt           DateTime       @default(now())
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  technician          Technician     @relation(fields: [technicianId], references: [id])
+  stops               TripStop[]
+  @@index([organizationId, startedAt])
+  @@index([technicianId, startedAt])
+}
+
+model TripStop {
+  id              String   @id @default(uuid())
+  tripId          String
+  latitude        Float
+  longitude       Float
+  arrivedAt       DateTime
+  departedAt      DateTime?
+  durationSeconds Int      @default(0)
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId])
+}
+
+model Branding {
+  id                 String       @id @default(uuid())
+  organizationId     String       @unique
+  applicationName    String
+  companyName        String
+  logoUrl            String?
+  faviconUrl         String?
+  primaryColor       String       @default("#0ea5e9")
+  secondaryColor     String       @default("#0f172a")
+  loginBackgroundUrl String?
+  supportEmail       String?
+  supportPhone       String?
+  timezone           String       @default("UTC")
+  country            String?
+  organization       Organization @relation(fields: [organizationId], references: [id])
+}
+
+model TrackingSetting {
+  id                       String       @id @default(uuid())
+  organizationId           String       @unique
+  movingIntervalSeconds    Int          @default(5)
+  walkingIntervalSeconds   Int          @default(20)
+  stationaryIntervalSeconds Int         @default(45)
+  lowBatteryIntervalSeconds Int         @default(90)
+  stopTimeoutSeconds       Int          @default(300)
+  automaticTripDetection   Boolean      @default(true)
+  gpsAccuracyThresholdMeters Float      @default(100)
+  lowBatteryThreshold      Int          @default(20)
+  organization             Organization @relation(fields: [organizationId], references: [id])
+}
+
+model RetentionSetting {
+  id                  String       @id @default(uuid())
+  organizationId      String       @unique
+  rawLocationDays     Int          @default(90)
+  tripDays            Int          @default(730)
+  auditLogDays        Int          @default(365)
+  organization        Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Alert {
+  id             String        @id @default(uuid())
+  organizationId String
+  technicianId   String?
+  deviceId       String?
+  type           String
+  severity       AlertSeverity @default(WARNING)
+  message        String
+  acknowledgedAt DateTime?
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  technician     Technician?   @relation(fields: [technicianId], references: [id])
+  device         Device?       @relation(fields: [deviceId], references: [id])
+  @@index([organizationId, createdAt])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  organizationId String?
+  action         String
+  resource       String
+  resourceId     String?
+  ipAddress      String?
+  result         String
+  createdAt      DateTime @default(now())
+  user           User?    @relation(fields: [userId], references: [id])
+  @@index([organizationId, createdAt])
+}

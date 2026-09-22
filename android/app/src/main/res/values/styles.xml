@@ -1,0 +1,16 @@
+<resources>
+    <!--
+      The whole UI is Compose, so the platform theme only has to get the window itself
+      right: a dark background (the first screen is the dark splash) and transparent
+      system bars so the app can draw edge to edge. Status/navigation bar icon colours
+      are switched at runtime by MainActivity as the user moves between dark and light
+      screens.
+    -->
+    <style name="Theme.Tracker" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/tracker_navy</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:colorAccent">@color/tracker_primary</item>
+    </style>
+</resources>
