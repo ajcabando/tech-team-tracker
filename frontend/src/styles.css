@@ -1017,33 +1017,33 @@ input[type='range'] { padding: 0; }
 }
 
 /* ---------- KPI cards ---------- */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .kpi {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 2px 12px;
+  gap: 2px 8px;
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-top: 3px solid var(--border);
+  border-top: 2px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 10px 12px;
   box-shadow: var(--shadow);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .kpi:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
 .kpi-icon {
   grid-row: span 3;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--primary-ink);
 }
-.kpi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.kpi-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .kpi-good { border-top-color: var(--good); }
 .kpi-good .kpi-icon { background: var(--good-bg); border-color: transparent; color: var(--good); }
 .kpi-warn { border-top-color: var(--warn); }
@@ -1051,7 +1051,7 @@ input[type='range'] { padding: 0; }
 .kpi-bad { border-top-color: var(--bad); }
 .kpi-bad .kpi-icon { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
 .kpi small { color: var(--text-muted); text-transform: uppercase; font-size: 10px; letter-spacing: 0.8px; font-weight: 700; }
-.kpi strong { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi strong { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .kpi span { font-size: 11px; color: var(--text-muted); }
 
 /* ---------- Command-center grid ---------- */
@@ -1185,7 +1185,7 @@ input[type='range'] { padding: 0; }
 /* ---------- Tablet / small desktop ---------- */
 @media (max-width: 1200px) {
   .command { grid-template-columns: 1fr; }
-  .kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 }
 @media (max-width: 1080px) {
   .workspace { grid-template-columns: 1fr; }
