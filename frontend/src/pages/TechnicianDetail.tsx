@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { AppShell, Badge, Card, EmptyState, ErrorNote, RemoveDialog, Spinner, StatCard, Avatar } from '../components/ui';
 import { LiveMap, LatLng } from '../components/LiveMap';
+import { TripMapThumb } from '../components/TripMapThumb';
 import { Link, useRouter } from '../lib/router';
 import { clock, duration, kilometers, relativeTime, shortDateTime, speed } from '../lib/format';
 import { useAuth } from '../state/auth';
@@ -17,7 +18,19 @@ type Detail = {
   today: { distanceMeters: number; tripCount: number; drivingSeconds: number; maxSpeed: number; locationPoints: number; firstActivity: string | null; lastActivity: string | null };
 };
 
-type Trip = { id: string; startedAt: string; endedAt: string | null; distanceMeters: number; drivingSeconds: number; maxSpeed: number; stopCount: number };
+type Trip = {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  distanceMeters: number;
+  drivingSeconds: number;
+  maxSpeed: number;
+  stopCount: number;
+  startLatitude: number;
+  startLongitude: number;
+  endLatitude: number | null;
+  endLongitude: number | null;
+};
 
 export function TechnicianDetailPage({ id }: { id: string }) {
   const { navigate } = useRouter();
@@ -159,6 +172,11 @@ export function TechnicianDetailPage({ id }: { id: string }) {
             {trips.length === 0 && <EmptyState title="No trips recorded yet" />}
             {trips.slice(0, 6).map((trip) => (
               <div className="trip-row" key={trip.id} onClick={() => navigate(`/trips/${trip.id}`)}>
+                <TripMapThumb
+                  tripId={trip.id}
+                  start={[trip.startLatitude, trip.startLongitude]}
+                  end={trip.endLatitude != null && trip.endLongitude != null ? [trip.endLatitude, trip.endLongitude] : null}
+                />
                 <div>
                   <strong>{kilometers(trip.distanceMeters)}</strong>
                   <small>

@@ -594,6 +594,25 @@ nav a.active { color: var(--sidebar-active-text); background: var(--sidebar-acti
 .tech-meta small { font-size: 10px; color: var(--text-muted); }
 .row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .trip-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); align-items: center; flex-wrap: wrap; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+.trip-thumb {
+  width: 80px; height: 56px; flex-shrink: 0;
+  border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--row-border);
+  background: var(--hover-bg);
+  position: relative;
+}
+.trip-thumb.is-loading::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 30%, color-mix(in srgb, var(--text) 6%, transparent) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: thumb-shimmer 1.2s ease-in-out infinite;
+}
+.trip-thumb .leaflet-container { cursor: default; }
+@keyframes thumb-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
 .trip-summary { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
 .trip-summary strong { color: var(--text); font-size: 16px; margin-right: 4px; font-variant-numeric: tabular-nums; }
 .profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
@@ -1294,6 +1313,7 @@ input[type='range'] { padding: 0; }
     overflow: hidden;
   }
   .map { --map-h: min(70dvh, 560px); }
+  .trip-thumb { display: none; }
   .trips-table-head { display: none; }
   .trips-table-row { grid-template-columns: 1fr auto; row-gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
   .trips-table-row .num { display: none; }

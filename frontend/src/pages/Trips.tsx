@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { AppShell, Badge, Card, EmptyState, ErrorNote, Field, Spinner } from '../components/ui';
+import { TripMapThumb } from '../components/TripMapThumb';
 import { useRouter } from '../lib/router';
 import { clock, dateInputValue, duration, kilometers, shortDateTime, speed } from '../lib/format';
 
@@ -15,6 +16,10 @@ type Trip = {
   stopCount: number;
   longestStopSeconds: number;
   source: 'AUTO' | 'MANUAL';
+  startLatitude: number;
+  startLongitude: number;
+  endLatitude: number | null;
+  endLongitude: number | null;
   technician: { id: string; name: string; employeeNumber: string } | null;
 };
 
@@ -154,6 +159,11 @@ export function TripsPage() {
         <Card key={day} title={day}>
           {dayTrips.map((trip) => (
             <div className="trip-row" key={trip.id} onClick={() => navigate(`/trips/${trip.id}`)}>
+              <TripMapThumb
+                tripId={trip.id}
+                start={[trip.startLatitude, trip.startLongitude]}
+                end={trip.endLatitude != null && trip.endLongitude != null ? [trip.endLatitude, trip.endLongitude] : null}
+              />
               <div>
                 <strong>{kilometers(trip.distanceMeters)}</strong>
                 <small>
