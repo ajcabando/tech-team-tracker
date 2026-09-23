@@ -164,10 +164,12 @@ export function TripsPage() {
                 start={[trip.startLatitude, trip.startLongitude]}
                 end={trip.endLatitude != null && trip.endLongitude != null ? [trip.endLatitude, trip.endLongitude] : null}
               />
-              <div>
+              <div className="trip-info">
                 <strong>{kilometers(trip.distanceMeters)}</strong>
+                <span className="trip-tech">{trip.technician?.name ?? 'Unknown technician'}</span>
                 <small>
-                  {clock(trip.startedAt)} – {trip.endedAt ? clock(trip.endedAt) : 'in progress'} · {trip.technician?.name ?? 'Unknown'}
+                  {trip.technician?.employeeNumber ? `${trip.technician.employeeNumber} · ` : ''}
+                  {clock(trip.startedAt)} – {trip.endedAt ? clock(trip.endedAt) : 'in progress'}
                 </small>
               </div>
               <div className="trip-meta">
