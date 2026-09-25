@@ -62,7 +62,12 @@ export function auth(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
     req.user = verifyAccess(raw);
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    // JWT-shaped input that failed verification is a bad or expired user session.
+    // Anything else is not a user credential at all — device credentials are opaque
+    // strings — so answer 403 without probing whether it once was a real token
+    // (probing would leak credential validity to whoever holds a guess).
+    if (raw.split('.').length === 3) return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(403).json({ error: 'A signed-in user session is required' });
   }
   if (req.user.device) return res.status(403).json({ error: 'A signed-in user session is required' });
   next();
