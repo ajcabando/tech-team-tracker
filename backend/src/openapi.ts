@@ -71,6 +71,7 @@ export const openApiDocument = {
       delete: operation('Remove a technician (409 while history exists; ?purge=true erases it)', ['technicians']),
     },
     '/api/technicians/{id}/locations': { get: operation('GPS history for a technician', ['technicians']) },
+    '/api/technicians/{id}/stops': { get: operation('Motionless-stop records for a technician (place + duration, ?from&to)', ['technicians']) },
     '/api/devices': { get: operation('List devices', ['devices']) },
     '/api/devices/{id}': {
       get: operation('Device detail', ['devices']),

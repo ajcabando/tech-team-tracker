@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { AppShell, Badge, Card, EmptyState, ErrorNote, RemoveDialog, Spinner, StatCard, Avatar } from '../components/ui';
-import { LiveMap, LatLng } from '../components/LiveMap';
+import { LiveMap, LatLng, MapStop } from '../components/LiveMap';
+import { ReplayTransport, useTripReplay } from '../components/TripReplay';
 import { TripMapThumb } from '../components/TripMapThumb';
 import { Link, useRouter } from '../lib/router';
-import { clock, duration, kilometers, relativeTime, shortDateTime, speed } from '../lib/format';
+import { clock, dateInputValue, duration, kilometers, relativeTime, shortDateTime, speed } from '../lib/format';
 import { useAuth } from '../state/auth';
 
 type Detail = {
@@ -15,7 +16,7 @@ type Detail = {
   phone: string | null;
   status: string;
   devices: Array<{ id: string; deviceName: string; status: string; batteryLevel: number | null; lastLatitude: number | null; lastLongitude: number | null; lastSpeed: number | null; lastAccuracy: number | null; lastSeen: string | null; appVersion: string | null; androidVersion: string | null; unpairedAt: string | null }>;
-  today: { distanceMeters: number; tripCount: number; drivingSeconds: number; maxSpeed: number; locationPoints: number; firstActivity: string | null; lastActivity: string | null };
+  today: { distanceMeters: number; tripCount: number; drivingSeconds: number; maxSpeed: number; locationPoints: number; firstActivity: string | null; lastActivity: string | null; stopSeconds: number; stopCount: number };
 };
 
 type Trip = {
@@ -32,6 +33,32 @@ type Trip = {
   endLongitude: number | null;
 };
 
+type StopRecord = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  arrivedAt: string;
+  departedAt: string | null;
+  durationSeconds: number;
+  pointCount: number;
+};
+
+function nextDay(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function dayLabel(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+const PlayIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+
 export function TechnicianDetailPage({ id }: { id: string }) {
   const { navigate } = useRouter();
   const { user } = useAuth();
@@ -40,35 +67,50 @@ export function TechnicianDetailPage({ id }: { id: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [route, setRoute] = useState<Array<{ latitude: number; longitude: number }>>([]);
+  const [stops, setStops] = useState<StopRecord[]>([]);
+  const [date, setDate] = useState(() => dateInputValue());
+  const [replayTripId, setReplayTripId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
+  const loadSeq = useRef(0);
+  const replay = useTripReplay(replayTripId, true);
 
-  const load = async () => {
+  const load = async (day: string) => {
+    const seq = ++loadSeq.current;
     try {
-      const [technician, tripList, points] = await Promise.all([
+      // Local midnight instants: the picker shows a local calendar day, so the
+      // window must start at local 00:00 — a bare date would parse as UTC and
+      // drop the early-morning hours in any non-UTC timezone.
+      const dayStart = new Date(`${day}T00:00:00`).toISOString();
+      const dayTo = new Date(`${nextDay(day)}T00:00:00`).toISOString();
+      const [technician, tripList, points, stopList] = await Promise.all([
         api<Detail>(`/api/technicians/${id}`),
-        api<Trip[]>(`/api/technicians/${id}/trips?limit=20`),
-        api<Array<{ latitude: number; longitude: number }>>(`/api/technicians/${id}/locations`),
+        api<Trip[]>(`/api/technicians/${id}/trips?from=${dayStart}&to=${dayTo}&limit=50`),
+        api<Array<{ latitude: number; longitude: number }>>(`/api/technicians/${id}/locations?from=${dayStart}&to=${dayTo}`),
+        api<StopRecord[]>(`/api/technicians/${id}/stops?from=${dayStart}&to=${dayTo}`),
       ]);
+      if (seq !== loadSeq.current) return;
       setDetail(technician);
       setTrips(tripList);
       setRoute(points);
+      setStops(stopList);
+      setError('');
     } catch (thrown) {
-      setError((thrown as { message?: string })?.message ?? 'Failed to load technician');
+      if (seq === loadSeq.current) setError((thrown as { message?: string })?.message ?? 'Failed to load technician');
     } finally {
-      setBusy(false);
+      if (seq === loadSeq.current) setBusy(false);
     }
   };
 
   useEffect(() => {
-    void load();
+    void load(dateInputValue());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function unpair(deviceId: string) {
     try {
       await api(`/api/devices/${deviceId}/unpair`, { method: 'POST' });
-      await load();
+      await load(date);
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? 'Failed to unpair device');
     }
@@ -78,17 +120,40 @@ export function TechnicianDetailPage({ id }: { id: string }) {
     if (!detail) return;
     try {
       await api(`/api/technicians/${detail.id}`, { method: 'PATCH', body: { status: detail.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE' } });
-      await load();
+      await load(date);
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? 'Failed to update the technician');
     }
   }
 
+  function selectDate(day: string) {
+    if (!day) return;
+    setDate(day);
+    setReplayTripId(null);
+    void load(day);
+  }
+
+  function startReplay(tripId: string) {
+    if (replayTripId === tripId) {
+      replay.restart();
+      return;
+    }
+    setReplayTripId(tripId);
+  }
+
   if (busy) return <AppShell title="Technician"><Spinner /></AppShell>;
   if (!detail) return <AppShell title="Technician"><EmptyState title="Technician not found" /></AppShell>;
 
-  const device = detail.devices.find((entry) => entry.status === 'ACTIVE') ?? detail.devices[0];
   const routePoints: LatLng[] = route.map((point) => [point.latitude, point.longitude]);
+  const isToday = date === dateInputValue();
+  const replayActive = replayTripId !== null;
+  const stopPins: MapStop[] = stops.map((stop) => ({
+    id: stop.id,
+    position: [stop.latitude, stop.longitude],
+    label: duration(stop.durationSeconds),
+    detail: `Arrived ${clock(stop.arrivedAt)} · ${stop.departedAt ? `left ${clock(stop.departedAt)}` : 'still stopped'}`,
+    open: !stop.departedAt,
+  }));
 
   return (
     <AppShell
@@ -105,7 +170,7 @@ export function TechnicianDetailPage({ id }: { id: string }) {
         </div>
       }
     >
-      <ErrorNote message={error} />
+      <ErrorNote message={error || replay.error} />
       <div className="profile-head">
         <Avatar name={detail.name} />
         <div>
@@ -120,6 +185,7 @@ export function TechnicianDetailPage({ id }: { id: string }) {
       <div className="stats">
         <StatCard label="Distance today" value={kilometers(detail.today.distanceMeters)} />
         <StatCard label="Trips today" value={detail.today.tripCount} />
+        <StatCard label="Stopped today" value={duration(detail.today.stopSeconds)} hint={`${detail.today.stopCount} stops`} />
         <StatCard label="Driving time" value={duration(detail.today.drivingSeconds)} />
         <StatCard label="Max speed today" value={speed(detail.today.maxSpeed)} />
         <StatCard label="GPS points today" value={detail.today.locationPoints} />
@@ -127,11 +193,96 @@ export function TechnicianDetailPage({ id }: { id: string }) {
       </div>
 
       <div className="workspace">
-        <Card title="Today's actual GPS route" className="map-card">
-          {routePoints.length > 1 ? <LiveMap route={routePoints} fitRoute height={460} /> : <EmptyState title="No GPS points in the last 24 hours" />}
+        <Card
+          title={
+            replayActive
+              ? `Replay · ${replay.trip ? shortDateTime(replay.trip.startedAt) : 'loading…'}`
+              : isToday
+                ? "Today's actual GPS route"
+                : `GPS route · ${dayLabel(date)}`
+          }
+          className="map-card"
+          action={
+            <div className="row-actions">
+              <input type="date" value={date} onChange={(event) => selectDate(event.target.value)} aria-label="Show data for date" />
+              {replayActive ? (
+                <button className="outline" onClick={() => setReplayTripId(null)}>
+                  Exit replay
+                </button>
+              ) : (
+                <button
+                  className="play-chip"
+                  onClick={() => trips[0] && startReplay(trips[0].id)}
+                  disabled={trips.length === 0}
+                  aria-label="Replay most recent trip"
+                  title={trips.length ? 'Replay most recent trip' : 'No trips on this day'}
+                >
+                  {PlayIcon}
+                </button>
+              )}
+            </div>
+          }
+        >
+          {replayActive ? (
+            replay.loading ? (
+              <Spinner />
+            ) : replay.route.length > 1 && replay.trip ? (
+              <>
+                <LiveMap
+                  route={replay.route}
+                  fitRoute
+                  height={460}
+                  playback={
+                    replay.current
+                      ? {
+                          position: [replay.current.latitude, replay.current.longitude],
+                          heading: replay.current.heading,
+                          label: `${clock(replay.current.recordedAt)} · ${speed(replay.current.speed ?? 0)}`,
+                          iconType: replay.trip.iconType ?? 'pin',
+                          iconColor: replay.trip.iconColor ?? undefined,
+                        }
+                      : null
+                  }
+                />
+                <ReplayTransport replay={replay} />
+              </>
+            ) : (
+              <EmptyState title="No replay points" detail="Raw GPS points for this trip may have been removed by your retention policy." />
+            )
+          ) : routePoints.length > 1 ? (
+            <LiveMap route={routePoints} fitRoute height={460} stops={stopPins} />
+          ) : (
+            <EmptyState title={isToday ? 'No GPS points in the last 24 hours' : 'No GPS points on this day'} />
+          )}
         </Card>
 
         <div className="stack">
+          <Card title={`Stops (${stops.length})`} action={<span className="muted">{dayLabel(date)}</span>}>
+            {stops.length === 0 && (
+              <EmptyState
+                title="No stops recorded"
+                detail="Places where the technician stayed still long enough to count as a stop appear here with their duration."
+              />
+            )}
+            {stops.map((stop) => (
+              <div className="trip-row" key={stop.id}>
+                <div className="trip-info">
+                  <strong>{duration(stop.durationSeconds)}</strong>
+                  <small>
+                    {clock(stop.arrivedAt)} → {stop.departedAt ? clock(stop.departedAt) : 'still stopped'}
+                  </small>
+                </div>
+                <div className="trip-meta">
+                  <span>
+                    {stop.latitude.toFixed(5)}, {stop.longitude.toFixed(5)}
+                  </span>
+                  <span>{stop.pointCount} pts</span>
+                  {!stop.departedAt && <Badge tone="primary">Ongoing</Badge>}
+                </div>
+              </div>
+            ))}
+          </Card>
+
           <Card title="Devices">
             {detail.devices.length === 0 && <EmptyState title="No devices" detail="Generate a pairing code from the Technicians page." />}
             {detail.devices.map((entry) => (
@@ -168,8 +319,8 @@ export function TechnicianDetailPage({ id }: { id: string }) {
             </Card>
           )}
 
-          <Card title="Recent trips" action={<Link to={`/trips?technicianId=${detail.id}`} className="link">View all →</Link>}>
-            {trips.length === 0 && <EmptyState title="No trips recorded yet" />}
+          <Card title={isToday ? 'Recent trips' : `Trips · ${dayLabel(date)}`} action={<Link to={`/trips?technicianId=${detail.id}`} className="link">View all →</Link>}>
+            {trips.length === 0 && <EmptyState title="No trips on this day" detail="Trips are detected automatically from uploaded GPS points once movement ends." />}
             {trips.slice(0, 6).map((trip) => (
               <div className="trip-row" key={trip.id} onClick={() => navigate(`/trips/${trip.id}`)}>
                 <TripMapThumb
@@ -188,6 +339,19 @@ export function TechnicianDetailPage({ id }: { id: string }) {
                   <span>{trip.stopCount} stops</span>
                   <span>{speed(trip.maxSpeed)}</span>
                 </div>
+                <button
+                  className="play-chip"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    startReplay(trip.id);
+                  }}
+                  aria-label="Play trip on map"
+                  title="Play trip on map"
+                  disabled={replayTripId === trip.id && replay.loading}
+                >
+                  {PlayIcon}
+                </button>
               </div>
             ))}
           </Card>

@@ -19,6 +19,15 @@ export type MapDevice = {
 
 export type LatLng = [number, number];
 
+/** A motionless place to draw as a pin: label = duration, detail = arrived → departed. */
+export type MapStop = {
+  id: string;
+  position: LatLng;
+  label: string;
+  detail?: string;
+  open?: boolean;
+};
+
 const STATUS_COLORS = {
   moving: '#22c55e',
   idle: '#f59e0b',
@@ -126,6 +135,7 @@ type Props = {
   center?: LatLng;
   zoom?: number;
   route?: LatLng[];
+  stops?: MapStop[];
   playback?: { position: LatLng; heading?: number | null; label: string; iconType?: string | null; iconColor?: string | null } | null;
   fitRoute?: boolean;
   height?: number;
@@ -148,7 +158,16 @@ function playbackIcon(heading?: number | null, iconType?: string | null, iconCol
   });
 }
 
-export function LiveMap({ devices = [], center, zoom = 11, route, playback, fitRoute = false, height = 560, tiles = 'standard', fitSignal = 0, onSelect }: Props) {
+function stopIcon(open?: boolean): L.DivIcon {
+  return L.divIcon({
+    className: 'stop-pin',
+    html: `<span class="stop-dot${open ? ' stop-dot-open' : ''}"></span>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
+export function LiveMap({ devices = [], center, zoom = 11, route, stops = [], playback, fitRoute = false, height = 560, tiles = 'standard', fitSignal = 0, onSelect }: Props) {
   const located = devices.filter((device) => device.lastLatitude != null && device.lastLongitude != null);
   const fallback: LatLng = center ?? (located.length ? [located[0].lastLatitude!, located[0].lastLongitude!] : [10.3157, 123.8854]);
   const now = Date.now();
@@ -164,9 +183,6 @@ export function LiveMap({ devices = [], center, zoom = 11, route, playback, fitR
         {fitRoute && route && route.length > 0 && <FitBounds points={route} />}
         {!fitRoute && fitSignal === 0 && located.length === 1 && <Recenter center={[located[0].lastLatitude!, located[0].lastLongitude!]} />}
         <FitAll points={located.map((device) => [device.lastLatitude!, device.lastLongitude!] as LatLng)} signal={fitSignal} />
-        {route && route.length > 1 && <Polyline positions={route} pathOptions={{ color: '#0ea5e9', weight: 4, opacity: 0.85 }} />}
-        {fitRoute && route && route.length > 0 && <FitBounds points={route} />}
-        {!fitRoute && located.length === 1 && <Recenter center={[located[0].lastLatitude!, located[0].lastLongitude!]} />}
         {located.map((device) => {
           const isOnline = device.lastSeen ? now - new Date(device.lastSeen).getTime() < onlineWindow : false;
           const isMoving = isOnline && (device.lastSpeed ?? 0) >= 3;
@@ -192,6 +208,19 @@ export function LiveMap({ devices = [], center, zoom = 11, route, playback, fitR
             </Marker>
           );
         })}
+        {stops.map((stop) => (
+          <Marker key={stop.id} position={stop.position} icon={stopIcon(stop.open)}>
+            <Popup>
+              <strong>{stop.label}</strong>
+              {stop.detail && (
+                <>
+                  <br />
+                  <span className="muted">{stop.detail}</span>
+                </>
+              )}
+            </Popup>
+          </Marker>
+        ))}
         {playback && (
           <Marker position={playback.position} icon={playbackIcon(playback.heading, playback.iconType, playback.iconColor)}>
             <Popup>{playback.label}</Popup>

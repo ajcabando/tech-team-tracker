@@ -61,6 +61,29 @@ duplicate=$(curl -fsS -X POST "$API_URL/api/locations/batch" -H "Authorization: 
 test "$(printf '%s' "$first" | json_value accepted)" = 2 || fail "batch accept"
 test "$(printf '%s' "$duplicate" | json_value duplicates)" = 2 || fail "idempotent uploads"
 
+echo "== dwell stops =="
+# A standstill of at least five minutes must surface as a stop with its duration,
+# and a phone credential must never be able to read them.
+probe_tech=$(curl -fsS -X POST "$API_URL/api/technicians" -H "Authorization: Bearer $admin_token" -H 'Content-Type: application/json' -d "{\"name\":\"E2E Dwell\",\"employeeNumber\":\"E2E-DWELL-$suffix\"}")
+probe_tech_id=$(printf '%s' "$probe_tech" | json_value id)
+probe_pair=$(curl -fsS -X POST "$API_URL/api/devices/pairing-code" -H "Authorization: Bearer $admin_token" -H 'Content-Type: application/json' -d "{\"technicianId\":\"$probe_tech_id\",\"deviceName\":\"E2E-DWELL-DEV-$suffix\"}")
+probe_code=$(printf '%s' "$probe_pair" | json_value pairingCode)
+probe_uuid=$(printf '%s' "$probe_pair" | json_value deviceUuid)
+probe_dev=$(curl -fsS -X POST "$API_URL/api/devices/pair" -H 'Content-Type: application/json' -d "{\"code\":\"$probe_code\",\"deviceUuid\":\"$probe_uuid\",\"manufacturer\":\"E2E\",\"model\":\"Dwell\",\"androidVersion\":\"15\",\"appVersion\":\"0.2.0\"}")
+probe_token=$(printf '%s' "$probe_dev" | json_value deviceToken)
+ds1=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=9)).strftime("%Y-%m-%dT%H:%M:%S.000Z"))')
+ds2=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=4)).strftime("%Y-%m-%dT%H:%M:%S.000Z"))')
+dst_point="{\"id\":\"$(python3 -c 'import uuid; print(uuid.uuid4())')\",\"recordedAt\":\"$ds1\",\"latitude\":10.3400,\"longitude\":123.9100,\"speed\":0,\"accuracy\":5,\"battery\":65}"
+dst_point2="{\"id\":\"$(python3 -c 'import uuid; print(uuid.uuid4())')\",\"recordedAt\":\"$ds2\",\"latitude\":10.3400,\"longitude\":123.9100,\"speed\":0,\"accuracy\":5,\"battery\":64}"
+curl -fsS -X POST "$API_URL/api/locations/batch" -H "Authorization: Bearer $probe_token" -H 'Content-Type: application/json' -d "{\"points\":[$dst_point,$dst_point2]}" >/dev/null
+stop_from=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=1)).strftime("%Y-%m-%d"))')
+stop_to=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=1)).strftime("%Y-%m-%d"))')
+stops=$(curl -fsS "$API_URL/api/technicians/$probe_tech_id/stops?from=$stop_from&to=$stop_to" -H "Authorization: Bearer $admin_token")
+test "$(printf '%s' "$stops" | json_len)" -ge 1 || fail "a five-minute standstill must be recorded as a stop"
+test "$(printf '%s' "$stops" | json_path "d[0]['durationSeconds']")" -ge 300 || fail "dwell stop must carry its duration"
+probe_stops_status=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/technicians/$probe_tech_id/stops" -H "Authorization: Bearer $probe_token")
+test "$probe_stops_status" = 403 || fail "device tokens must not read stop lists (got $probe_stops_status)"
+
 echo "== live dashboard =="
 live=$(curl -fsS "$API_URL/api/dashboard/live" -H "Authorization: Bearer $admin_token")
 test "$(printf '%s' "$live" | grep -c "$tech_id")" -ge 1 || fail "live dashboard technician"

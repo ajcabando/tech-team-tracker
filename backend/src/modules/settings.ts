@@ -131,6 +131,7 @@ const trackingBody = z.object({
   stationaryIntervalSeconds: z.number().int().min(1).max(3600),
   lowBatteryIntervalSeconds: z.number().int().min(1).max(3600),
   stopTimeoutSeconds: z.number().int().min(30).max(7200),
+  stopClusterRadiusMeters: z.number().int().min(10).max(1000),
   automaticTripDetection: z.boolean(),
   gpsAccuracyThresholdMeters: z.number().min(1).max(5000),
   lowBatteryThreshold: z.number().int().min(1).max(100),

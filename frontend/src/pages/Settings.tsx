@@ -14,6 +14,7 @@ type Tracking = {
   stopTimeoutSeconds: number;
   automaticTripDetection: boolean;
   gpsAccuracyThresholdMeters: number;
+  stopClusterRadiusMeters: number;
   lowBatteryThreshold: number;
 };
 
@@ -261,6 +262,9 @@ export function SettingsPage() {
               </Field>
               <Field label="GPS accuracy threshold (m)">
                 <input type="number" min={1} value={tracking.gpsAccuracyThresholdMeters} onChange={(event) => setTracking({ ...tracking, gpsAccuracyThresholdMeters: Number(event.target.value) })} disabled={!canEdit} />
+              </Field>
+              <Field label="Stop cluster radius (m)" hint="Nearby still-points merge into one stop">
+                <input type="number" min={10} max={1000} value={tracking.stopClusterRadiusMeters} onChange={(event) => setTracking({ ...tracking, stopClusterRadiusMeters: Number(event.target.value) })} disabled={!canEdit} />
               </Field>
               <Field label="Low battery threshold (%)">
                 <input type="number" min={1} max={100} value={tracking.lowBatteryThreshold} onChange={(event) => setTracking({ ...tracking, lowBatteryThreshold: Number(event.target.value) })} disabled={!canEdit} />

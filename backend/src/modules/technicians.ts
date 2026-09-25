@@ -71,12 +71,23 @@ techniciansRouter.get('/api/technicians/:id', auth, asyncHandler(async (req: Aut
   if (!technician) return res.status(404).json({ error: 'Technician not found' });
 
   const startOfDay = startOfUtcDay(new Date());
-  const [trips, locations] = await Promise.all([
+  const [trips, locations, dayStops] = await Promise.all([
     db.trip.findMany({ where: { technicianId: technician.id, startedAt: { gte: startOfDay } }, orderBy: { startedAt: 'desc' } }),
     db.location.count({ where: { technicianId: technician.id, recordedAt: { gte: startOfDay } } }),
+    db.dwellStop.findMany({
+      where: { technicianId: technician.id, OR: [{ arrivedAt: { gte: startOfDay } }, { departedAt: { gte: startOfDay } }, { departedAt: null }] },
+      select: { arrivedAt: true, departedAt: true },
+    }),
   ]);
   const distanceToday = trips.reduce((sum, trip) => sum + trip.distanceMeters, 0);
   const drivingSeconds = trips.reduce((sum, trip) => sum + trip.drivingSeconds, 0);
+  // Only the portion of each stop that falls inside today counts toward the total.
+  const nowMs = Date.now();
+  const stopSeconds = dayStops.reduce((sum, stop) => {
+    const start = Math.max(stop.arrivedAt.getTime(), startOfDay.getTime());
+    const end = stop.departedAt ? Math.min(stop.departedAt.getTime(), nowMs) : nowMs;
+    return sum + Math.max(0, (end - start) / 1000);
+  }, 0);
   res.json({
     ...technician,
     today: {
@@ -85,6 +96,8 @@ techniciansRouter.get('/api/technicians/:id', auth, asyncHandler(async (req: Aut
       drivingSeconds,
       maxSpeed: trips.reduce((max, trip) => Math.max(max, trip.maxSpeed), 0),
       locationPoints: locations,
+      stopSeconds: Math.round(stopSeconds),
+      stopCount: dayStops.length,
       firstActivity: locations ? trips.at(-1)?.startedAt ?? null : null,
       lastActivity: trips[0]?.endedAt ?? trips[0]?.startedAt ?? null,
     },
@@ -126,12 +139,58 @@ techniciansRouter.get('/api/technicians/:id/locations', auth, asyncHandler(async
   const rawFrom = typeof req.query.from === 'string' ? req.query.from : null;
   const parsedFrom = rawFrom ? new Date(rawFrom) : new Date(Date.now() - 86400000);
   const from = Number.isNaN(parsedFrom.getTime()) ? new Date(Date.now() - 86400000) : parsedFrom;
+  const rawTo = typeof req.query.to === 'string' ? req.query.to : null;
+  const parsedTo = rawTo ? new Date(rawTo) : null;
+  const to = parsedTo && !Number.isNaN(parsedTo.getTime()) ? parsedTo : undefined;
   res.json(
     await db.location.findMany({
-      where: { technicianId: String(req.params.id), ...orgScope(req.user), recordedAt: { gte: from } },
+      where: { technicianId: String(req.params.id), ...orgScope(req.user), recordedAt: { gte: from, ...(to ? { lt: to } : {}) } },
       orderBy: { recordedAt: 'asc' },
       take: 10000,
     }),
+  );
+}));
+
+/**
+ * Motionless-stop records for a technician: every place they stayed still long
+ * enough to be recorded, with the time spent there. Defaults to the current
+ * UTC day; `from`/`to` select any range. Stops are matched by interval overlap
+ * so a park spanning midnight appears on both days.
+ */
+techniciansRouter.get('/api/technicians/:id/stops', auth, asyncHandler(async (req: AuthedRequest, res) => {
+  const parsed = z.object({ from: z.string().optional(), to: z.string().optional() }).safeParse(req.query);
+  const dayStart = startOfUtcDay(new Date());
+  const rawFrom = parsed.success ? parsed.data.from : undefined;
+  const rawTo = parsed.success ? parsed.data.to : undefined;
+  const from = rawFrom ? new Date(rawFrom) : dayStart;
+  const to = rawTo ? new Date(rawTo) : new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) {
+    return res.status(400).json({ error: 'Invalid date range: expected from < to' });
+  }
+
+  const stops = await db.dwellStop.findMany({
+    where: {
+      technicianId: String(req.params.id),
+      ...orgScope(req.user),
+      arrivedAt: { lt: to },
+      OR: [{ departedAt: null }, { departedAt: { gt: from } }],
+    },
+    orderBy: { arrivedAt: 'desc' },
+    take: 500,
+  });
+
+  const nowMs = Date.now();
+  res.json(
+    stops.map((stop) => ({
+      id: stop.id,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      arrivedAt: stop.arrivedAt,
+      // An open stop keeps accruing time live, independent of the last recompute.
+      departedAt: stop.departedAt,
+      durationSeconds: stop.departedAt ? stop.durationSeconds : Math.max(stop.durationSeconds, Math.round((nowMs - stop.arrivedAt.getTime()) / 1000)),
+      pointCount: stop.pointCount,
+    })),
   );
 }));
 
@@ -148,17 +207,18 @@ techniciansRouter.delete('/api/technicians/:id', auth, roles(UserRole.SUPERADMIN
   if (!technician) return res.status(404).json({ error: 'Technician not found' });
 
   const purge = req.query.purge === 'true';
-  const [locations, trips, alerts, devices] = await Promise.all([
+  const [locations, trips, stops, alerts, devices] = await Promise.all([
     db.location.count({ where: { technicianId: technician.id } }),
     db.trip.count({ where: { technicianId: technician.id } }),
+    db.dwellStop.count({ where: { technicianId: technician.id } }),
     db.alert.count({ where: { technicianId: technician.id } }),
     db.device.count({ where: { technicianId: technician.id } }),
   ]);
 
-  if ((locations > 0 || trips > 0) && !purge) {
+  if ((locations > 0 || trips > 0 || stops > 0) && !purge) {
     return res.status(409).json({
       error: 'This technician has recorded GPS history. Deactivate them to keep the history, or confirm permanent erasure.',
-      history: { locations, trips, alerts, devices },
+      history: { locations, trips, stops, alerts, devices },
       canPurge: true,
     });
   }
@@ -166,6 +226,7 @@ techniciansRouter.delete('/api/technicians/:id', auth, roles(UserRole.SUPERADMIN
   const result = await db.$transaction(async (tx) => {
     if (purge) {
       await tx.trip.deleteMany({ where: { technicianId: technician.id } }); // TripStop rows cascade
+      await tx.dwellStop.deleteMany({ where: { technicianId: technician.id } });
       await tx.location.deleteMany({ where: { technicianId: technician.id } });
     }
 
@@ -190,7 +251,7 @@ techniciansRouter.delete('/api/technicians/:id', auth, roles(UserRole.SUPERADMIN
   });
 
   await audit({ req, action: purge ? 'technician.delete-purged' : 'technician.delete', resource: 'Technician', resourceId: technician.id, organizationId: technician.organizationId });
-  res.json({ deleted: true, purged: purge, erasedLocations: purge ? locations : 0, erasedTrips: purge ? trips : 0, ...result });
+  res.json({ deleted: true, purged: purge, erasedLocations: purge ? locations : 0, erasedTrips: purge ? trips : 0, erasedStops: purge ? stops : 0, ...result });
 }));
 
 export function startOfUtcDay(date: Date): Date {

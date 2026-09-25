@@ -7,6 +7,7 @@ import { rateLimit } from '../middleware/rateLimit';
 import { classifyQuality, metersPerSecondToKmh, MAX_PLAUSIBLE_SPEED_KMH } from '../services/geo';
 import { getTracking } from '../services/settings';
 import { computeTripsForDevice } from '../services/tripEngine';
+import { computeStopsForDevice } from '../services/stopEngine';
 import { publish } from '../realtime';
 
 export const locationsRouter = Router();
@@ -100,6 +101,12 @@ locationsRouter.post('/api/locations/batch', rateLimit({ windowMs: 60_000, max: 
     await computeTripsForDevice({ id: device.id, organizationId: device.organizationId, technicianId: device.technicianId });
   } catch (error) {
     console.error('trip-detection-failed', error);
+  }
+
+  try {
+    await computeStopsForDevice({ id: device.id, organizationId: device.organizationId, technicianId: device.technicianId });
+  } catch (error) {
+    console.error('stop-detection-failed', error);
   }
 
   res.json({ accepted: inserted.count, duplicates: rows.length - inserted.count });

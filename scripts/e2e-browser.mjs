@@ -10,8 +10,9 @@
  *   5. deep links (#/trips) render directly
  *   6. a technician can be created and a pairing code generated through the UI
  *   7. removing a technician or device with GPS history is refused once, then confirmed
- *   8. no console errors, uncaught exceptions, or same-origin request failures
- *   9. no horizontal layout overflow at desktop (1440x900) and mobile (390x844)
+ *   8. a technician's detail page shows dwell stops and plays a trip replay on the map
+ *   9. no console errors, uncaught exceptions, or same-origin request failures
+ *   10. no horizontal layout overflow at desktop (1440x900) and mobile (390x844)
  *
  * Usage:
  *   node scripts/e2e-browser.mjs
@@ -167,6 +168,9 @@ const DOM_HELPERS = `
       if (label) {
         const nested = label.querySelector('input, textarea, select');
         if (nested) return nested;
+        // Standard label/input association: <label for="..."> rather than wrapping.
+        const linked = label.htmlFor && document.getElementById(label.htmlFor);
+        if (linked) return linked;
       }
       const lower = name.toLowerCase();
       return (
@@ -696,6 +700,60 @@ async function main() {
     );
     check(ownRow === 'protected', `your own account is not offered for removal (${ownRow})`);
 
+    // ------------------------------- 6f. technician detail: stops and replay
+    console.log('== 6f. technician detail: stops and trip replay ==');
+    context = 'technician-detail';
+    const dwellName = 'E2E Dwell UI ' + RUN;
+    const dwellTech = await apiPost('/api/technicians', { name: dwellName, employeeNumber: `E2E-DW-UI-${RUN}` }, seededLogin.accessToken);
+    const dwellPair = await apiPost('/api/devices/pairing-code', { technicianId: dwellTech.id, deviceName: 'E2E-DW-DEV-' + RUN }, seededLogin.accessToken);
+    const dwellDevice = await apiPost('/api/devices/pair', { code: dwellPair.pairingCode, deviceUuid: dwellPair.deviceUuid });
+    // Two still points five minutes apart become a dwell stop; two moving points
+    // become a trip, so the detail page has both a stop row and something to play.
+    await apiPost(
+      '/api/locations/batch',
+      {
+        points: [
+          { id: crypto.randomUUID(), recordedAt: new Date(Date.now() - 9 * 60000).toISOString(), latitude: 10.315, longitude: 123.8845, speed: 0, accuracy: 5, battery: 70 },
+          { id: crypto.randomUUID(), recordedAt: new Date(Date.now() - 4 * 60000).toISOString(), latitude: 10.315, longitude: 123.8845, speed: 0, accuracy: 5, battery: 69 },
+          { id: crypto.randomUUID(), recordedAt: new Date(Date.now() - 3 * 60000).toISOString(), latitude: 10.3157, longitude: 123.8854, speed: 11.6, accuracy: 4, battery: 68 },
+          { id: crypto.randomUUID(), recordedAt: new Date(Date.now() - 2 * 60000).toISOString(), latitude: 10.32, longitude: 123.89, speed: 13.2, accuracy: 5, battery: 67 },
+        ],
+      },
+      dwellDevice.deviceToken,
+    );
+
+    const detailReady = await goto(
+      `${DASHBOARD_URL}/#/technicians/${dwellTech.id}`,
+      `document.querySelector('h1')?.textContent?.trim() === ${JSON.stringify(dwellName)}`,
+    );
+    check(detailReady, 'technician detail renders from a deep link');
+    check(await browser.waitFor(`document.body.textContent.includes('Stopped today')`, sessionId, 6000), 'stopped-today stat renders');
+    check(await browser.waitFor(`!!document.querySelector('.map-card input[type="date"]')`, sessionId, 6000), 'date picker renders on the map card');
+    check(
+      await browser.waitFor(`[...document.querySelectorAll('.card-head h2')].some((h) => /^Stops \\(\\d+\\)$/.test(h.textContent))`, sessionId, 8000),
+      'stops card renders with a count',
+    );
+    check(await browser.waitFor(`document.querySelectorAll('.stop-pin').length >= 1`, sessionId, 10000), 'stop pin appears on the map');
+    check(await browser.waitFor(`!!document.querySelector('.map-card .play-chip')`, sessionId, 6000), 'main play button renders on the map card');
+
+    await browser.evaluate(`document.querySelector('.map-card .play-chip').click()`, sessionId);
+    check(await browser.waitFor(`document.body.textContent.includes('Exit replay')`, sessionId, 12000), 'main play starts the trip replay');
+    check(await browser.waitFor(`!!document.querySelector('.map-card .replay .transport-play')`, sessionId, 6000), 'replay transport controls render');
+    await browser.evaluate(`[].slice.call(document.querySelectorAll('.map-card button')).filter((b) => b.textContent.indexOf('Exit replay') >= 0)[0]?.click()`, sessionId);
+    check(await browser.waitFor(`!document.body.textContent.includes('Exit replay')`, sessionId, 8000), 'exit replay returns to the daily route');
+
+    check(await browser.waitFor(`!!document.querySelector('.trip-row .play-chip')`, sessionId, 6000), 'per-trip play button renders');
+    await browser.evaluate(`document.querySelector('.trip-row .play-chip').click()`, sessionId);
+    check(await browser.waitFor(`document.body.textContent.includes('Exit replay')`, sessionId, 12000), 'trip row play starts the replay');
+    await browser.evaluate(`[].slice.call(document.querySelectorAll('.map-card button')).filter((b) => b.textContent.indexOf('Exit replay') >= 0)[0]?.click()`, sessionId);
+    await browser.waitFor(`!document.body.textContent.includes('Exit replay')`, sessionId, 8000);
+
+    // Leave no test technicians behind.
+    await fetch(`${DASHBOARD_URL}/api/technicians/${dwellTech.id}?purge=true`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + seededLogin.accessToken },
+    });
+
     // ------------------------------------------------------ 7. desktop overflow
     console.log('\n== 7. layout: desktop 1440x900 ==');
     await setViewport(VIEWPORTS.desktop);
@@ -765,7 +823,7 @@ main()
       process.exit(1);
     }
     console.log(
-      'Browser acceptance test passed: login, navigation, breadcrumbs, collapse, deep links, technician + pairing flow, guarded device/technician removal, runtime health, and responsive layout.',
+      'Browser acceptance test passed: login, navigation, breadcrumbs, collapse, deep links, technician + pairing flow, guarded device/technician removal, dwell stops + trip replay, runtime health, and responsive layout.',
     );
   })
   .catch((error) => {

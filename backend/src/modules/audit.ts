@@ -39,9 +39,10 @@ auditRouter.post('/api/maintenance/retention', auth, roles(UserRole.SUPERADMIN, 
     db.auditLog.deleteMany({ where: { organizationId, createdAt: { lt: days(retention.auditLogDays) } } }),
   ]);
   const trips = await db.trip.deleteMany({ where: { organizationId, startedAt: { lt: days(retention.tripDays) } } });
+  const dwellStops = await db.dwellStop.deleteMany({ where: { organizationId, arrivedAt: { lt: days(retention.tripDays) } } });
 
   await audit({ req, action: 'maintenance.retention', resource: 'System', result: 'SUCCESS', organizationId });
-  res.json({ deletedLocations: locations.count, deletedTrips: trips.count, deletedAuditLogs: auditLogs.count, retention });
+  res.json({ deletedLocations: locations.count, deletedTrips: trips.count, deletedDwellStops: dwellStops.count, deletedAuditLogs: auditLogs.count, retention });
 }));
 
 auditRouter.get('/api/organizations/me', auth, asyncHandler(async (req: AuthedRequest, res) => {
