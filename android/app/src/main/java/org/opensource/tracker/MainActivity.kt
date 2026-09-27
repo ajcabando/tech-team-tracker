@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -152,6 +153,61 @@ class MainActivity : ComponentActivity() {
         TrackerPrefs.open(this).edit().putBoolean("tracking_enabled", true).apply()
         SyncScheduler.ensurePeriodic(this)
         ContextCompat.startForegroundService(this, Intent(this, TrackingService::class.java))
+        offerBatteryExemption()
+    }
+
+    // --- battery optimisation -------------------------------------------------
+
+    /**
+     * True once the user has allowlisted this app from Doze.
+     *
+     * Tracking works without this — a location foreground service is not killed
+     * by Doze on stock Android. It matters because the standby bucket keeps
+     * ageing, and after a few days several OEM skins stop delivering callbacks
+     * or kill the service outright. There is no way for an app to detect that
+     * it is about to happen, which is why this is offered once at setup rather
+     * than being treated as an error.
+     */
+    private fun isBatteryExempt(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val power = getSystemService(PowerManager::class.java) ?: return true
+        return power.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    /**
+     * Offers the exemption once, after tracking has actually started, so the
+     * prompt is not another hurdle in front of pairing. Declining is fine and is
+     * not nagged about again: [TrackerPrefs] records that the offer was made.
+     */
+    private fun offerBatteryExemption() {
+        if (isBatteryExempt()) return
+        val preferences = TrackerPrefs.open(this)
+        if (preferences.getBoolean("battery_exemption_offered", false)) return
+        preferences.edit().putBoolean("battery_exemption_offered", true).apply()
+
+        AlertDialog.Builder(this)
+            .setTitle("Keep tracking reliable")
+            .setMessage(
+                "Android puts unused apps to sleep to save battery, and after a few days " +
+                    "the phone's manufacturer may stop this app receiving location updates. " +
+                    "Allowing the app to run without battery restrictions keeps trips " +
+                    "recording when the phone is idle. Tracking stays visible in its " +
+                    "notification either way."
+            )
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Open settings") { _, _ ->
+                // The direct request dialog is only available to apps that declare
+                // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, and only on N+. Falling back
+                // to the full list keeps this working on every other release.
+                val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:$packageName"))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && direct.resolveActivity(packageManager) != null) {
+                    startActivity(direct)
+                } else {
+                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+            .show()
     }
 
     /**

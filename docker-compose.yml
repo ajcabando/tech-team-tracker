@@ -28,6 +28,10 @@ services:
       API_PORT: 4000
     ports:
       - '${API_PORT:-5789}:4000'
+    volumes:
+      # Single source of truth for the release version, also consumed by the
+      # dashboard via /health/version. Read-only: the backend never writes it.
+      - ./VERSION:/app/VERSION:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +52,12 @@ services:
     restart: unless-stopped
     ports:
       - '${FRONTEND_PORT:-5788}:80'
+    volumes:
+      # The signed APK served at /tracker.apk. A directory mount rather than a
+      # single-file mount on purpose: if the file is absent Docker would create
+      # a *directory* in its place and the route would break confusingly. nginx
+      # serves the file from disk, so publishing is just replacing it here.
+      - ./apk:/srv/apk:ro
     depends_on:
       backend:
         condition: service_healthy

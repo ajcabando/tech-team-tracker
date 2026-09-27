@@ -39,6 +39,8 @@ on any company name.
 - [Development](#development)
 - [Testing](#testing)
 - [Production deployment](#production-deployment)
+- [Deploying your own copy](#deploying-your-own-copy)
+- [Updating the Android app](#updating-the-android-app)
 - [Backups and restore](#backups-and-restore)
 - [Security](#security)
 - [Privacy](#privacy)
@@ -428,6 +430,11 @@ All configuration is environment-driven. See [`.env.example`](.env.example).
 | `DEFAULT_*` | Fallback branding before an organization configures its own | `COMPANY` etc. |
 | `SEED_*` | Optional development seed account | — |
 | `NODE_ENV` | Runtime mode | `production` |
+| `WATCHDOG_SILENCE_MINUTES` | Silence after which a paired phone raises a device-offline alert | `30` |
+| `WATCHDOG_ELIGIBLE_DAYS` | Only devices seen within this window are eligible for that alert | `7` |
+| `WATCHDOG_DEDUPE_HOURS` | Re-report the same silent device at most this often | `6` |
+| `WATCHDOG_INTERVAL_MINUTES` | How often the silent-device scan runs | `15` |
+| `APP_VERSION` | Override the version read from the `VERSION` file (rarely needed) | *(from file)* |
 
 Never commit `.env`, signing keys, production URLs, or certificates.
 
@@ -599,22 +606,75 @@ docker compose up -d --build
 Then make it yours from **Settings → Branding** (application/company name, logo, colors, login
 background, support contact, timezone). No code change or redeploy is needed for branding.
 
+**Each company runs its own server and its own domain**, and the Android app is pointed at whichever
+server the technician types during pairing — no server address is baked into the app, so the same APK
+works for everyone. You still need two things per deployment:
+
+1. **A reverse proxy terminating HTTPS in front of port 5788.** The containers serve plain HTTP by
+   design, and the app refuses an `http://` server address, so a phone cannot pair without TLS.
+2. **A signed APK of your own**, served from your own `/tracker.apk`. See
+   [docs/signing.md](docs/signing.md) — using the shared key from the public repository is
+   supported, but it means whoever holds that key can replace the app on every phone you deploy.
+   Running your own key is one `keytool` command and is the better fit for a customer deployment.
+
 ## Updating the Android app
 
-Each deployer signs their own APK — the signing key must stay private to you:
+**The full guide is [docs/signing.md](docs/signing.md)** — read it before your first release. It
+covers choosing a signing key, why rotating one destroys every phone's pairing, and how to roll an
+update out to devices that are already paired.
+
+Short version, if you are building your own signed APK:
 
 ```bash
-# one time: generate android/release.keystore + android/local.properties (both gitignored)
+# one time: generate android/release.keystore and fill in android/local.properties
+#           (both gitignored) — docs/signing.md has the keytool command
 cd android
-JAVA_HOME=<jdk-17> ANDROID_HOME=<sdk> ./gradlew assembleRelease
-cp app/build/outputs/apk/release/app-release.apk ../frontend/public/tracker.apk
-# bump the version labels in About.tsx / AndroidSetup.tsx, then:
-docker compose up -d --build frontend
+./gradlew assembleRelease
+cd ..
+
+# publish it to ./apk, which is served at /tracker.apk
+scripts/publish-apk.sh \
+  android/app/build/outputs/apk/release/app-release.apk \
+  --fingerprint "$(keytool -list -v -keystore android/release.keystore -alias tracker \
+                   | awk '/SHA256:/{print $2}' | tr -d ':' | tr 'A-F' 'a-f')" \
+  --url https://tracker.example.com
 ```
 
-**Back up `android/release.keystore` and its passwords.** Losing them means phones can never be
-updated in place — the app must be uninstalled and reinstalled. Never commit the keystore;
-`*.jks`, `*.keystore`, and `local.properties` are already gitignored.
+`apk/` is bind-mounted read-only into the `frontend` container and nginx serves the file from disk,
+so publishing is just replacing it. **No image rebuild and no container restart** — admins see the
+new build on their next page load. `publish-apk.sh` refuses anything unsigned, signed with the wrong
+key, older than what is already published, or built from a Room schema change with no migration.
+
+### Releasing from CI
+
+Push a tag and the workflow builds, verifies and publishes a GitHub Release:
+
+```bash
+# bump the VERSION file to the release you are cutting, commit, then:
+git tag v0.3.4 && git push --tags
+```
+
+The tag must match the `VERSION` file, or the build fails. `VERSION` is the single source of truth:
+the Android build reads it for `versionName`, the backend serves it at `/health/version`, and the
+dashboard displays it — so the number on the download button cannot drift from the build behind it.
+
+The workflow needs four repository secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`). **This repository is public, so treat the shared
+signing key as fleet-critical** — see "Your own key" in docs/signing.md.
+
+### Keeping a phone paired across an update
+
+Android preserves an app's data across an update only when the package name, the signing certificate
+and a strictly higher `versionCode` all line up. Otherwise the update is refused and the only fix is
+an uninstall — which erases the pairing *and* every GPS point recorded but not yet uploaded, because
+`android:allowBackup="false"` means there is no backup. That is the whole reason the release key must
+be long-lived, and the reason `publish-apk.sh` checks the certificate rather than trusting the build.
+
+Check a phone before rolling out:
+
+```bash
+adb shell dumpsys package org.opensource.tracker | grep -E "versionCode|versionName"
+```
 
 ## Backups and restore
 

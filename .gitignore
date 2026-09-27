@@ -13,3 +13,6 @@ local.properties
 *.keystore
 .DS_Store
 graphify-out/
+
+# Signed release APK, served at /tracker.apk. Build artifact, not source.
+apk/tracker.apk

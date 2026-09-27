@@ -30,9 +30,18 @@ node scripts/e2e-browser.mjs                 # headless Chrome, needs CHROME_PAT
 # Android
 # Open android/ in Android Studio (SDK 35, JDK 17) → Build → Make Project
 # Emulator server URL: http://10.0.2.2:5789
+# Do NOT put org.gradle.java.home in gradle.properties — it is committed and a
+# machine-specific path breaks CI. Use JAVA_HOME, which Android Studio sets for
+# itself from its bundled JBR.
 
 # Database
 docker compose exec postgres psql -U tracker -d tracker   # access PostgreSQL (not published to host)
+
+# Release
+./scripts/check-version.sh                                # version consistency, no build needed
+./scripts/preflight-update.sh <apk> [--install]            # refuse an APK that would break a fleet
+./scripts/publish-apk.sh <apk> --url https://your-server   # publish to ./apk → served at /tracker.apk
+git tag v0.3.4 && git push --tags                         # CI builds the signed release
 ```
 
 ## Architecture
@@ -49,7 +58,7 @@ backend/src/
                         technicians, devices, locations, trips, reports,
                         settings, dashboard, alerts, audit, health)
   services/          → geo.ts (GPS quality), trips.ts/tripEngine.ts (detection),
-                        settings.ts
+                        settings.ts, watchdog.ts (stale-device alerts)
   middleware/        → rateLimit.ts
   openapi.ts         → generated OpenAPI spec
 
@@ -86,6 +95,16 @@ backend/prisma/
 - **Prisma migrations** — auto-applied on container start. Never edit an applied migration by hand. Add new ones under `backend/prisma/migrations/<timestamp>_<name>/`.
 - **Device removal is two-step** — API returns 409 while GPS history exists. Must pass `?purge=true` to erase. Technicians with history are unpaired+disabled instead of deleted.
 - **SSE live stream** — `/api/dashboard/stream` must not be buffered by nginx (already configured). Corporate proxies may buffer SSE; dashboard falls back to 20s polling.
+- **The containers serve plain HTTP by design** — TLS is terminated by a reverse proxy on another host. Do not add `listen 443` to `frontend/nginx.conf`; a deployment that terminates TLS in front of it is the intended topology.
+- **`VERSION` at the repo root is the only version string** — the Android build reads it for `versionName`, the backend serves it at `/health/version` (bind-mounted into the container), and the dashboard fetches it. Never hardcode a version in `frontend/src`; `scripts/check-version.sh` fails the build if you do.
+- **`android/gradle.properties` must never contain a machine path** — it is committed, so `org.gradle.java.home` pointing at your local Android Studio breaks CI. The JVM comes from the environment instead.
+- **The release signing key is fleet-critical** — a phone can only be updated in place if the certificate and a higher `versionCode` match, and the only alternative is an uninstall, which erases the pairing *and* every unsynced GPS point (`allowBackup="false"`, so there is no backup). Never commit the keystore; use the Actions secrets. See `docs/signing.md`.
+- **`scripts/preflight-update.sh` gates every release** — run it before publishing. It compares signing *certificates*, not file hashes: two builds of identical content differ byte-for-byte because of zip timestamps.
+- **Room has no migrations registered** — `LocationDatabase` is built with no `addMigrations` and no `fallbackToDestructiveMigration`, so bumping `@Database(version = …)` without an explicit `Migration` crashes the app on every paired phone. `preflight-update.sh` checks for this.
+- **A `location` foreground service needs `ACCESS_BACKGROUND_LOCATION`** — the failure is silent on Android 11-13 (service runs, notification shows, no location arrives) and a `SecurityException` on 14+. `BootReceiver` checks the grant before starting, and `TrackingService.promoteToForeground()` stops cleanly rather than crash-looping.
+- **`BOOT_COMPLETED` may start a location FGS** — it is an explicit exemption, and `location` is not on Android 15's boot-receiver blocklist (`dataSync`, `camera`, `mediaPlayback`, `phoneCall`, `mediaProjection`, `microphone`). `location` also has no runtime cap, unlike `dataSync`.
+- **Nothing can be done about OEM battery killing from code** — Android's own Doze does not kill a location FGS, but Samsung/Xiaomi/Huawei layers do. It is handled by a one-time in-app prompt plus a per-manufacturer checklist on the Android setup page, and the real backstop is the server-side device-offline watchdog.
+- **No API can disable the mobile hotspot** — `WifiManager.setWifiApEnabled` is `@hide` at every API level and there is no DPM policy for tethering. Only Device Owner can do it, which the project does not use. Do not attempt reflection.
 
 ## Code conventions
 
@@ -107,5 +126,9 @@ backend/prisma/
 | Modify trip detection | `backend/src/services/tripEngine.ts`, `trips.ts` |
 | Change auth flow | `backend/src/auth.ts`, `frontend/src/state/auth.tsx` |
 | Change Android tracking | `android/app/src/main/java/.../TrackingService.kt` |
+| Change boot behaviour / permissions | `android/app/src/main/java/.../BootReceiver.kt`, `MainActivity.kt` |
+| Cut a release | `VERSION` → `git tag v*` → CI, or `scripts/publish-apk.sh` |
+| Change what's published on the dashboard | `VERSION` + `frontend/src/lib/api.ts` (`useReleaseVersion`) |
+| Change stale-device alerting | `backend/src/services/watchdog.ts` |
 | Modify live map | `frontend/src/components/LiveMap.tsx` |
 | Change rate limits | `backend/src/middleware/rateLimit.ts` |

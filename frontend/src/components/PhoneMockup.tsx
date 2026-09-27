@@ -14,7 +14,7 @@ function StatusBar({ dark }: { dark: boolean }) {
   );
 }
 
-function InstallScreen() {
+function InstallScreen({ version }: { version?: string }) {
   return (
     <div className="pm-screen light">
       <StatusBar dark={false} />
@@ -22,7 +22,7 @@ function InstallScreen() {
         <span className="pm-appicon">◎</span>
         <div>
           <strong>Tracker</strong>
-          <small>v0.3.2 · 8.4 MB</small>
+          <small>{version ? `${version} · signed` : 'signed release'}</small>
         </div>
       </div>
       <p className="pm-install-q">Do you want to install this application?</p>
@@ -119,12 +119,12 @@ function PermissionsScreen() {
  * Faithful to the real app's layout, strings and colors — replace with genuine
  * captures if they become available.
  */
-export function PhoneMockup({ screen, label }: { screen: MockScreen; label: string }) {
+export function PhoneMockup({ screen, label, version }: { screen: MockScreen; label: string; version?: string }) {
   return (
     <figure className="phone-mockup" role="img" aria-label={`Illustration: ${label}`}>
       <div className="pm-frame">
         <div className="pm-notch" aria-hidden="true" />
-        {screen === 'install' && <InstallScreen />}
+        {screen === 'install' && <InstallScreen version={version} />}
         {screen === 'pairing' && <PairingScreen />}
         {screen === 'status' && <StatusScreen />}
         {screen === 'permissions' && <PermissionsScreen />}

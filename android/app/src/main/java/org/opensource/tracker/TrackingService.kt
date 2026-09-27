@@ -1,5 +1,6 @@
 package org.opensource.tracker
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.Constraints
@@ -66,10 +68,34 @@ class TrackingService : Service() {
             .putInt("today_trip_count", 0)
             .apply()
         tripDetector.reset()
-        startForeground(NOTIFICATION_ID, notification("Tracking Active", "Starting GPS…"))
+        promoteToForeground()
         scheduleSync()
         refreshConfig()
         adjustTracking(BatteryMonitor.level(this), BatteryMonitor.isCharging(this))
+    }
+
+    /**
+     * Becomes a foreground service, or gives up cleanly.
+     *
+     * A `location` foreground service is a while-in-use type, so on Android 14+
+     * startForeground throws SecurityException if the "Allow all the time" grant
+     * is missing. Letting that escape would crash the service, and because
+     * WorkManager and the boot receiver both restart it, the phone would sit in
+     * a crash loop that looks like nothing at all from the dashboard. Stopping
+     * is the honest outcome: without the grant there is no location to record.
+     */
+    private fun promoteToForeground() {
+        try {
+            startForeground(NOTIFICATION_ID, notification("Tracking Active", "Starting GPS…"))
+        } catch (denied: SecurityException) {
+            Log.w(TAG, "Cannot start location tracking: 'Allow all the time' is not granted. ${denied.message}")
+            preferences.edit().putBoolean("tracking_active", false).apply()
+            stopSelf()
+        } catch (late: ForegroundServiceStartNotAllowedException) {
+            Log.w(TAG, "System refused the foreground start: ${late.message}")
+            preferences.edit().putBoolean("tracking_active", false).apply()
+            stopSelf()
+        }
     }
 
     /** Pull adaptive intervals, branding, and technician identity from the server. */
@@ -298,6 +324,14 @@ class TrackingService : Service() {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(title, detail))
     }
 
+    /**
+     * STICKY is the right return value: the system recreates the service when it
+     * is killed, and onCreate re-establishes everything — the notification, the
+     * adaptive location request, and the sync queue. The restarted intent is
+     * null by design, and nothing here reads it, so there is no state to
+     * reconstruct. Location is the one foreground service type with no runtime
+     * limit, so no onTimeout handling is needed.
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
@@ -311,6 +345,7 @@ class TrackingService : Service() {
 
     companion object {
         const val ACTION_START = "org.opensource.tracker.START"
+        private const val TAG = "TrackingService"
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 10
     }

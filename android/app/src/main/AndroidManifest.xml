@@ -9,6 +9,15 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+      Asks to be exempted from Doze battery optimisation. A location foreground
+      service survives Doze on stock Android, but the standby bucket keeps
+      ageing and several OEM skins (Samsung, Xiaomi, Huawei) will kill a
+      long-running location service within days unless the app is allowlisted.
+      The app only offers the request; the user decides, and dismissing it
+      leaves tracking working, just less reliably.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:theme="@style/Theme.Tracker"

@@ -1,4 +1,31 @@
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/**
+ * The release version lives in the single VERSION file at the repository root so
+ * the backend, the dashboard, and the Android APK can never drift apart. The
+ * dashboard reads it back from /health/version instead of hardcoding a literal.
+ *
+ * The file is not in the image (the build context is ./backend), so it is bind
+ * mounted to /app/VERSION. Both locations are tried to keep `npm run dev`
+ * working without Docker.
+ */
+function readVersion(): string {
+  const override = process.env.APP_VERSION?.trim();
+  if (override) return override;
+  for (const candidate of ['VERSION', '../VERSION', '../../VERSION']) {
+    try {
+      const contents = readFileSync(resolve(process.cwd(), candidate), 'utf8').trim();
+      if (contents) return contents;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  // Only reachable if the file is missing entirely, which the release check
+  // treats as a build failure.
+  return 'unknown';
+}
 
 function int(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
@@ -17,7 +44,7 @@ export const config = {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
-  version: '0.2.0',
+  version: readVersion(),
   defaults: {
     applicationName: process.env.DEFAULT_APPLICATION_NAME || 'COMPANY TRACKER',
     companyName: process.env.DEFAULT_COMPANY_NAME || 'COMPANY',

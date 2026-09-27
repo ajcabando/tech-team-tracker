@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export type ApiError = {
   status: number;
   message: string;
@@ -130,4 +132,38 @@ export function openStream(path: string, handlers: Record<string, (payload: unkn
     });
   }
   return source;
+}
+
+/**
+ * The release version, read from the server rather than hardcoded. The server
+ * gets it from the single VERSION file at the repository root, which is also
+ * what the Android build uses for versionName — so the number the dashboard
+ * advertises and the number baked into the APK cannot drift apart.
+ *
+ * Cached for the life of the page: it changes only on deploy, never at runtime.
+ */
+let versionPromise: Promise<string> | null = null;
+
+export function fetchReleaseVersion(): Promise<string> {
+  if (!versionPromise) {
+    versionPromise = api<{ version?: string }>('/health/version', { auth: false })
+      .then((data) => data.version || '')
+      .catch(() => '');
+  }
+  return versionPromise;
+}
+
+/** Prefixed for display, or an empty string while the value is still loading. */
+export function useReleaseVersion(): string {
+  const [version, setVersion] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetchReleaseVersion().then((value) => {
+      if (active) setVersion(value ? `v${value}` : '');
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return version;
 }

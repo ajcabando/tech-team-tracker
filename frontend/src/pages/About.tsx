@@ -2,9 +2,11 @@ import React from 'react';
 import { AppShell, Card } from '../components/ui';
 import { useAuth } from '../state/auth';
 import { Link } from '../lib/router';
+import { useReleaseVersion } from '../lib/api';
 
 export function AboutPage() {
   const { branding, user } = useAuth();
+  const release = useReleaseVersion();
   return (
     <AppShell title="About" subtitle="PRODUCT">
       <Card title={branding.applicationName}>
@@ -30,7 +32,7 @@ export function AboutPage() {
       </Card>
       <Card title="Android tracking app" action={<Link to="/android-setup" className="link">Open setup guide →</Link>}>
         <p className="muted">Administrator instructions for privately installing, configuring, and pairing the Android tracking app.</p>
-        <div className="kv"><span>Latest release</span><strong>v0.3.3 · signed</strong></div>
+        <div className="kv"><span>Latest release</span><strong>{release ? `${release} · signed` : 'signed'}</strong></div>
         <div className="row-actions" style={{ marginTop: 12 }}>
           <a className="primary as-button" href="/tracker.apk" download="tracker.apk">Download APK</a>
           <Link to="/android-setup" className="outline as-button">Setup guide</Link>

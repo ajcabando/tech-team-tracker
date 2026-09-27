@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { config, assertProductionSecrets } from './config';
 import { db } from './db';
 import { getSystemState } from './modules/setup';
+import { scheduleDeviceWatchdog } from './services/watchdog';
 
 const app = createApp();
 
@@ -38,6 +39,7 @@ function scheduleMaintenance() {
 bootstrap()
   .then(() => {
     scheduleMaintenance();
+    scheduleDeviceWatchdog();
     app.listen(config.port, () => console.log(`Tracker API listening on ${config.port}`));
   })
   .catch((error) => {

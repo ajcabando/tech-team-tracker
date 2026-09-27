@@ -13,6 +13,21 @@ val keystoreProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
 
+// versionName comes from the single VERSION file at the repository root, which
+// the backend also serves via /health/version. versionCode stays here because it
+// must be an integer that increases monotonically: Android refuses to install an
+// update whose versionCode is not higher than the installed one, and a fleet
+// update that silently fails looks like a "blocked" install. Release checks
+// assert the two move together (scripts/check-version.sh).
+// Deliberately NOT named `versionName`: inside defaultConfig { } the right-hand
+// side would resolve to DefaultConfig's own property and self-assign to empty.
+val releaseVersion: String = rootProject.file("../VERSION")
+    .takeIf { it.exists() }
+    ?.readText()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: error("VERSION file not found at ${rootProject.file("../VERSION")} — cannot build a release")
+
 android {
     namespace = "org.opensource.tracker"
     compileSdk = 35
@@ -21,8 +36,10 @@ android {
         applicationId = "org.opensource.tracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3.3"
+        // Must increase on every release. 7 was published as 0.3.3 (code 6);
+        // 0.3.4 is the first release built from the VERSION file.
+        versionCode = 7
+        versionName = releaseVersion
     }
 
     signingConfigs {
