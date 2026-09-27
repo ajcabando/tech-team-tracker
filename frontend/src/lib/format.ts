@@ -14,6 +14,23 @@ export function duration(seconds: number | null | undefined): string {
   return `${secs}s`;
 }
 
+/**
+ * Position/duration clock for the replay axis, always h:mm:ss.
+ *
+ * `duration()` intentionally drops seconds above an hour, which is right for a
+ * trip list and useless for a position readout. Zero-padded and fixed width on
+ * purpose: at 50x the raw seconds figure changes by 5 every tick, and a stable
+ * field is easier to read than one whose glyph count shifts.
+ */
+export function elapsedClock(seconds: number | null | undefined): string {
+  if (seconds == null) return '—';
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export function speed(kmh: number | null | undefined, digits = 0): string {
   if (kmh == null) return '—';
   return `${kmh.toFixed(digits)} km/h`;

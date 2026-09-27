@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { LatLng } from './LiveMap';
-import { clock, kilometers, speed } from '../lib/format';
+import { clock, elapsedClock, kilometers, speed } from '../lib/format';
 
 export type ReplayFrame = {
   latitude: number;
@@ -55,8 +55,45 @@ export type TripReplayState = {
   seek: (seconds: number) => void;
 };
 
-export const REPLAY_SPEEDS = [1, 2, 5, 10];
+/**
+ * Playback multipliers offered in the transport.
+ *
+ * The previous 1/2/5/10 set was sized for watching a vehicle crawl. At real
+ * GPS point density a 1x replay of a multi-hour trip is unwatchable, and at the
+ * bottom end the marker advances well under one recorded point per tick.
+ */
+export const REPLAY_SPEEDS = [20, 50, 70];
+
+/** 50x: a 1h43m trip replays in about two minutes. */
+export const DEFAULT_REPLAY_RATE = 50;
+
 const TICK_MS = 100;
+
+/**
+ * Index of the last frame at or before `seconds`.
+ *
+ * Binary search because this runs on every animation tick and the replay
+ * endpoint returns up to 10,000 undownsampled points, so the previous linear
+ * scan cost ~100k comparisons per second by the end of a long trip. At 10
+ * lookups per second this is about 14. `offsetSeconds` is ascending because
+ * the endpoint orders points by `recordedAt asc` and derives the offset from it.
+ */
+function frameIndexAt(frames: ReplayFrame[], seconds: number): number {
+  if (!frames.length) return 0;
+  let low = 0;
+  let high = frames.length - 1;
+  let found = 0;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (frames[mid].offsetSeconds <= seconds) {
+      found = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return found;
+}
 
 /**
  * Trip replay engine (shared by the trip page and the technician map card):
@@ -70,7 +107,7 @@ export function useTripReplay(tripId: string | null, autoPlay = false): TripRepl
   const [loading, setLoading] = useState(Boolean(tripId));
   const [error, setError] = useState('');
   const [playing, setPlaying] = useState(false);
-  const [rate, setRateState] = useState(2);
+  const [rate, setRateState] = useState(DEFAULT_REPLAY_RATE);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<number | null>(null);
 
@@ -126,15 +163,7 @@ export function useTripReplay(tripId: string | null, autoPlay = false): TripRepl
     };
   }, [playing, rate, totalSeconds]);
 
-  const currentIndex = useMemo(() => {
-    if (!frames.length) return 0;
-    let index = 0;
-    for (let i = 0; i < frames.length; i += 1) {
-      if (frames[i].offsetSeconds <= elapsed) index = i;
-      else break;
-    }
-    return index;
-  }, [frames, elapsed]);
+  const currentIndex = useMemo(() => frameIndexAt(frames, elapsed), [frames, elapsed]);
 
   const route = useMemo(() => frames.map((frame) => [frame.latitude, frame.longitude] as LatLng), [frames]);
   const canPlay = route.length > 1;
@@ -224,7 +253,7 @@ export function ReplayTransport({ replay }: { replay: TripReplayState }) {
       <div className="replay-axis">
         <span>{trip ? clock(trip.startedAt) : '—'}</span>
         <span>
-          {Math.round(elapsed)}s / {totalSeconds}s
+          {elapsedClock(elapsed)} / {elapsedClock(totalSeconds)}
         </span>
         <span>{trip?.endedAt ? clock(trip.endedAt) : 'now'}</span>
       </div>
