@@ -176,6 +176,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.name }}
         run: |
           set -euo pipefail
+          # This step runs with working-directory: android, so the asset path is
+          # relative to android/. (A `uses:` step is not — those run from the
+          # workspace root, which is why upload-artifact takes android/… )
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK" || { echo "::error::missing $APK"; exit 1; }
           cat > release-notes.md <<EOF
           Signed release \`$VERSION\`.
 
@@ -184,7 +189,6 @@ jobs:
           releases — changing the key forces every phone to reinstall and loses
           its pairing.
           EOF
-          gh release create "$TAG" \
-            android/app/build/outputs/apk/release/app-release.apk \
+          gh release create "$TAG" "$APK" \
             --title "$TAG" \
             --notes-file release-notes.md
