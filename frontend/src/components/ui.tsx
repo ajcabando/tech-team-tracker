@@ -468,6 +468,7 @@ export function AppShell({ children, title, subtitle, actions }: { children: Rea
         </div>
         <Link to="/alerts" className="menu-toggle as-button" aria-label={unread > 0 ? `Alerts, ${unread} unacknowledged` : 'Alerts'}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2.5h-15z" /><path d="M10 21a2.2 2.2 0 0 0 4 0" /></svg>
+          {unread > 0 && <span className="count-badge">{unread > 99 ? '99+' : unread}</span>}
         </Link>
         <ThemeToggle />
         <button ref={menuButtonRef} className="menu-toggle" onClick={() => setDrawerOpen(true)} aria-label="Open navigation" aria-controls="main-sidebar" aria-expanded={drawerOpen}>

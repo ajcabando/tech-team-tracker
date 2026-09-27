@@ -117,7 +117,7 @@ export function AdminPage() {
       {!loading && tab === 'Organizations' && (
         <Card title={`${organizations.length} organizations`}>
           {organizations.length === 0 && <EmptyState title="No organizations yet" />}
-          <div className="table-wrap">
+          <div className="table-wrap cards-mobile">
             {organizations.length > 0 && (
               <table className="data-table">
                 <thead>
@@ -135,14 +135,14 @@ export function AdminPage() {
                 <tbody>
                   {organizations.map((organization) => (
                     <tr key={organization.id}>
-                      <td><strong>{organization.name}</strong><small>{shortDateTime(organization.createdAt)}</small></td>
-                      <td>{organization.slug}</td>
-                      <td><Badge tone={organization.status === 'ACTIVE' ? 'good' : 'bad'}>{organization.status}</Badge></td>
-                      <td>{organization._count?.technicians ?? 0}</td>
-                      <td>{organization._count?.devices ?? 0}</td>
-                      <td>{organization._count?.users ?? 0}</td>
-                      <td>{organization._count?.trips ?? 0}</td>
-                      <td className="row-actions">
+                      <td data-label="Organization"><strong>{organization.name}</strong><small>{shortDateTime(organization.createdAt)}</small></td>
+                      <td data-label="Slug">{organization.slug}</td>
+                      <td data-label="Status"><Badge tone={organization.status === 'ACTIVE' ? 'good' : 'bad'}>{organization.status}</Badge></td>
+                      <td data-label="Technicians">{organization._count?.technicians ?? 0}</td>
+                      <td data-label="Devices">{organization._count?.devices ?? 0}</td>
+                      <td data-label="Users">{organization._count?.users ?? 0}</td>
+                      <td data-label="Trips">{organization._count?.trips ?? 0}</td>
+                      <td className="row-actions actions no-label">
                         <button className="link" onClick={() => void setOrgStatus(organization, organization.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE')}>
                           {organization.status === 'ACTIVE' ? 'Disable' : 'Enable'}
                         </button>
@@ -168,7 +168,7 @@ export function AdminPage() {
       {!loading && tab === 'Users' && (
         <Card title={`${users.length} users`}>
           {users.length === 0 && <EmptyState title="No users" />}
-          <div className="table-wrap">
+          <div className="table-wrap cards-mobile">
             {users.length > 0 && (
               <table className="data-table">
                 <thead>
@@ -184,12 +184,12 @@ export function AdminPage() {
                 <tbody>
                   {users.map((entry) => (
                     <tr key={entry.id}>
-                      <td><strong>{entry.name}</strong></td>
-                      <td>{entry.email}</td>
-                      <td><Badge tone="primary">{entry.role}</Badge></td>
-                      <td><Badge tone={entry.status === 'ACTIVE' ? 'good' : 'bad'}>{entry.status}</Badge></td>
-                      <td>{entry.lastLogin ? shortDateTime(entry.lastLogin) : 'Never'}</td>
-                      <td className="row-actions">
+                      <td data-label="Name"><strong>{entry.name}</strong></td>
+                      <td data-label="Email">{entry.email}</td>
+                      <td data-label="Role"><Badge tone="primary">{entry.role}</Badge></td>
+                      <td data-label="Status"><Badge tone={entry.status === 'ACTIVE' ? 'good' : 'bad'}>{entry.status}</Badge></td>
+                      <td data-label="Last login">{entry.lastLogin ? shortDateTime(entry.lastLogin) : 'Never'}</td>
+                      <td className="row-actions actions no-label">
                         <button className="link" onClick={() => setResettingUser(entry)} title="Set a new password for this user">
                           Password
                         </button>
@@ -218,7 +218,7 @@ export function AdminPage() {
       {!loading && tab === 'Audit log' && (
         <Card title={`${audit.length} recent entries`}>
           {audit.length === 0 && <EmptyState title="No audit entries yet" />}
-          <div className="table-wrap">
+          <div className="table-wrap cards-mobile">
             {audit.length > 0 && (
               <table className="data-table">
                 <thead>
@@ -234,12 +234,12 @@ export function AdminPage() {
                 <tbody>
                   {audit.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{shortDateTime(entry.createdAt)}</td>
-                      <td>{entry.user?.email ?? 'system'}</td>
-                      <td><code>{entry.action}</code></td>
-                      <td>{entry.resource}{entry.resourceId ? ` · ${entry.resourceId.slice(0, 8)}` : ''}</td>
-                      <td><Badge tone={entry.result === 'SUCCESS' ? 'good' : 'bad'}>{entry.result}</Badge></td>
-                      <td>{entry.ipAddress ?? '—'}</td>
+                      <td data-label="When">{shortDateTime(entry.createdAt)}</td>
+                      <td data-label="User">{entry.user?.email ?? 'system'}</td>
+                      <td data-label="Action"><code>{entry.action}</code></td>
+                      <td data-label="Resource">{entry.resource}{entry.resourceId ? ` · ${entry.resourceId.slice(0, 8)}` : ''}</td>
+                      <td data-label="Result"><Badge tone={entry.result === 'SUCCESS' ? 'good' : 'bad'}>{entry.result}</Badge></td>
+                      <td data-label="IP">{entry.ipAddress ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -224,7 +224,7 @@ export function DashboardPage() {
   return (
     <AppShell
       title="Dashboard"
-      subtitle={`Welcome back, ${firstName} · Real-time location of your technicians in the field`.toUpperCase()}
+      subtitle={`Welcome back, ${firstName} · live fleet positions`.toUpperCase()}
       actions={
         <span className={`live-pill ${live ? 'is-live' : ''}`}>
           <span className="status-dot" />
@@ -346,10 +346,12 @@ export function DashboardPage() {
                   <div className="trips-table-row" key={trip.id} onClick={() => navigate(`/trips/${trip.id}`)} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && navigate(`/trips/${trip.id}`)}>
                     <span className="num">{index + 1}</span>
                     <span><strong>{trip.technician?.name ?? 'Unknown'}</strong><small>{trip.technician?.employeeNumber}</small></span>
-                    <span>{clock(trip.startedAt)}</span>
-                    <span>{trip.endedAt ? clock(trip.endedAt) : '—'}</span>
-                    <span>{duration(trip.drivingSeconds)}</span>
-                    <span>{kilometers(trip.distanceMeters)}</span>
+                    {/* data-label is the only thing that tells Start from End once
+                        the header row is hidden on a phone. */}
+                    <span data-label="Start">{clock(trip.startedAt)}</span>
+                    <span data-label="End">{trip.endedAt ? clock(trip.endedAt) : '—'}</span>
+                    <span data-label="Driving">{duration(trip.drivingSeconds)}</span>
+                    <span data-label="Distance">{kilometers(trip.distanceMeters)}</span>
                     <span><Badge tone={trip.endedAt ? 'good' : 'primary'}>{trip.endedAt ? 'Completed' : 'Ongoing'}</Badge></span>
                   </div>
                 ))}
@@ -359,7 +361,7 @@ export function DashboardPage() {
         </div>
 
         <div className="command-side">
-          <Card title="Technicians" action={<Link to="/technicians" className="link">Manage →</Link>} className="roster-card">
+          <Card title="Technicians" action={<Link to="/technicians" className="link">Manage →</Link>}>
             {devices.length === 0 && !loading && <EmptyState title="No paired devices yet" detail="Create a technician and generate a pairing code to get started." />}
             {loading && devices.length === 0 && <SkeletonCard lines={5} />}
             {devices

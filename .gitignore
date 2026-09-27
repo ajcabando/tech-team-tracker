@@ -14,5 +14,9 @@ local.properties
 .DS_Store
 graphify-out/
 
+# Per-viewport screenshots from scripts/audit-mobile.mjs. Regenerated on every
+# run (~13MB); the committed artefact is the docs/audit-mobile.md report.
+docs/screenshots/audit/
+
 # Signed release APK, served at /tracker.apk. Build artifact, not source.
 apk/tracker.apk

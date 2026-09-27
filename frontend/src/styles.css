@@ -100,6 +100,12 @@ body {
 h1, h2, h3, strong { font-family: var(--font-display); }
 h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
 h2 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+/* Names are single unbroken tokens and the API allows 120 characters, so a long
+   one has to be allowed to break. `anywhere` (not `break-word`) is required: only
+   `anywhere` shrinks the min-content size, and a flex item's `min-width: auto`
+   is that min-content — with `break-word` the heading still refuses to shrink and
+   widens the whole page past the viewport. */
+h1, h2, h3, .eyebrow { overflow-wrap: anywhere; }
 a { color: inherit; text-decoration: none; }
 .muted { color: var(--text-muted); font-size: 12.5px; }
 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
@@ -469,6 +475,7 @@ nav a.active { color: var(--sidebar-active-text); background: var(--sidebar-acti
 
 .content { flex: 1; padding: 28px 36px 60px; max-width: 1640px; margin: 0 auto; width: 100%; min-width: 0; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 24px; flex-wrap: wrap; }
+.page-head > div { min-width: 0; }
 .page-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .eyebrow { font-size: 10.5px; letter-spacing: 1.6px; color: var(--text-muted); font-weight: 700; margin: 0 0 8px; text-transform: uppercase; }
 
@@ -511,19 +518,7 @@ nav a.active { color: var(--sidebar-active-text); background: var(--sidebar-acti
 .map-card .empty-state, .map-card .center-state { padding: 80px 20px; }
 .map { width: 100%; border-radius: 0; overflow: hidden; background: var(--map-bg); }
 .leaflet-container { height: 100%; width: 100%; font-family: var(--font-sans); }
-.map-detail {
-  display: flex;
-  gap: 18px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 22px;
-  border-top: 1px solid var(--border);
-  flex-wrap: wrap;
-  background: var(--surface-2);
-}
-.map-detail-metrics { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); }
-.map-detail-metrics strong { color: var(--text); font-variant-numeric: tabular-nums; }
-.map-detail-actions { display: flex; gap: 8px; }
+.map-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .pin { background: none; border: none; }
 .vehicle-dot {
@@ -665,7 +660,7 @@ nav a.active { color: var(--sidebar-active-text); background: var(--sidebar-acti
 .chip.active, .tab.active { background: var(--secondary); border-color: var(--secondary); color: #fff; font-weight: 600; }
 [data-theme='dark'] .chip.active, [data-theme='dark'] .tab.active { background: var(--primary); border-color: var(--primary); }
 .tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
-.live-pill, .status-pill {
+.live-pill {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 11.5px; font-weight: 600; color: var(--text-muted);
   background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px;
@@ -842,22 +837,6 @@ input[type='range'] { padding: 0; }
 .server-address code { overflow-wrap: anywhere; }
 .setup-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
 .setup-step { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 20px; margin: 0; }
-.screenshot-placeholder {
-  min-height: 190px;
-  border: 1px dashed var(--input-border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  padding: 16px;
-  text-align: center;
-}
-.screenshot-placeholder svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.5; }
-.screenshot-placeholder strong { font-size: 11px; }
-.screenshot-placeholder span { font-size: 10px; line-height: 1.4; }
 
 /* ---------- Phone mockups (setup guide illustrations) ---------- */
 .phone-mockup { margin: 0; display: grid; gap: 6px; justify-items: center; }
@@ -1047,7 +1026,11 @@ input[type='range'] { padding: 0; }
    noise next to the search field. Hover keeps a quiet wash for affordance. */
 .topbar .icon-btn, .mobile-header .icon-btn { background: transparent; border-color: transparent; }
 .topbar .icon-btn:hover, .mobile-header .icon-btn:hover { background: var(--hover-bg); border-color: transparent; }
-.icon-btn .count-badge {
+/* Applies to the topbar bell (.icon-btn) and to the mobile header bell, which is
+   a .menu-toggle and would otherwise fall outside this rule and stack the count
+   inline underneath the icon. */
+.icon-btn .count-badge,
+.menu-toggle .count-badge {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -1115,15 +1098,6 @@ input[type='range'] { padding: 0; }
 .map-wrap { position: relative; z-index: 0; }
 .map-wrap:fullscreen { background: var(--map-bg); }
 .map-wrap:fullscreen .map { height: 100% !important; }
-.map-float {
-  position: absolute;
-  z-index: 500;
-  display: flex;
-  gap: 6px;
-}
-.map-float.tr { top: 12px; right: 12px; }
-.map-float.tl { top: 12px; left: 12px; flex-direction: column; }
-.map-float .icon-btn { background: var(--surface); box-shadow: var(--shadow-lg); }
 .map-legend {
   display: flex;
   gap: 8px;
@@ -1263,7 +1237,10 @@ input[type='range'] { padding: 0; }
   .mobile-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .mobile-brand .brand-text { min-width: 0; }
   .mobile-brand strong { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mobile-brand small { display: block; color: var(--sidebar-muted); font-size: 10px; margin-top: 2px; }
+  /* The company name is capped at 80 chars by the API, so it must not be
+     allowed to wrap: a taller header would grow past the sticky topbar and
+     start overlapping the page beneath it. */
+  .mobile-brand small { display: block; color: var(--sidebar-muted); font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .menu-toggle, .drawer-close {
     display: grid;
     place-items: center;
@@ -1275,9 +1252,10 @@ input[type='range'] { padding: 0; }
     color: var(--sidebar-text);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 8px;
+    position: relative;
   }
   .menu-toggle svg, .drawer-close svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-  .mobile-header .icon-btn { width: 44px; height: 44px; background: transparent; color: var(--sidebar-text); }
+  .mobile-header .icon-btn { width: 44px; height: 44px; flex-shrink: 0; background: transparent; color: var(--sidebar-text); }
   a.menu-toggle { text-decoration: none; }
   .sidebar {
     width: min(320px, 88vw);
@@ -1327,7 +1305,12 @@ input[type='range'] { padding: 0; }
   .content { padding: 18px 14px 40px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .stat strong { font-size: 21px; }
-  .topbar { margin: -18px -14px 18px; padding: 10px 14px; gap: 8px; }
+
+  /* The mobile header is already the persistent chrome, so the topbar must not
+     compete for the same slot. Both are `position: sticky; top: 0`, which on a
+     phone pinned the topbar underneath the opaque header: the search field and
+     its submit button became unreadable AND untappable on every scrolled page. */
+  .topbar { position: static; margin: -18px -14px 18px; padding: 10px 14px; gap: 8px; }
   .topbar-search { max-width: none; }
   .topbar-clock { display: none; }
   /* Bell + theme toggle already live in the mobile brand row — hide the topbar duplicates. */
@@ -1335,9 +1318,11 @@ input[type='range'] { padding: 0; }
   .kpis { display: none; }
   .page-head { align-items: flex-start; margin-bottom: 14px; }
   .breadcrumbs { display: none; }
+  /* Three lines, not two: a wrapped heading block gets ~190px next to the
+     nowrap live pill, which is only ~24 characters per line at this size. */
   .eyebrow {
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -1351,6 +1336,9 @@ input[type='range'] { padding: 0; }
   .primary, .outline { min-height: 44px; }
   .chip, .tab { min-height: 44px; }
   .map-toolbar { padding: 0 14px 10px; }
+  /* Eight controls in a 334px strip: trim the horizontal padding so the filter
+     row does not spill onto a third line. */
+  .map-toolbar .chip, .map-toolbar .outline { padding-left: 11px; padding-right: 11px; }
   .map-legend { padding: 10px 14px 14px; }
   .map-selected { padding: 12px 14px; }
 
@@ -1358,11 +1346,91 @@ input[type='range'] { padding: 0; }
   .cards-mobile .data-table, .cards-mobile .data-table tbody { display: block; }
   .cards-mobile .data-table thead { display: none; }
   .cards-mobile .data-table tr { display: grid; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
-  .cards-mobile .data-table td { display: flex; align-items: baseline; gap: 10px; border: 0; padding: 2px 0; font-size: 12.5px; }
+  .cards-mobile .data-table td { display: flex; align-items: baseline; gap: 10px; border: 0; padding: 2px 0; font-size: 12.5px; flex-wrap: wrap; min-width: 0; }
   .cards-mobile .data-table td::before { content: attr(data-label); flex: 0 0 96px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 700; }
   .cards-mobile .data-table td.no-label::before { content: none; }
+  /* .data-table td strong is `display: block` from the base rule, which makes it
+     a flex item here. Let the primary and secondary values share the value
+     column on their own lines instead of competing for one. */
+  .cards-mobile .data-table td strong,
+  .cards-mobile .data-table td small { flex: 1 1 100%; min-width: 0; }
+  .cards-mobile .data-table td strong + small { margin-top: -2px; }
   .cards-mobile .data-table td.actions { grid-column: 1 / -1; }
   .cards-mobile .table-wrap { overflow-x: visible; }
   .cards-mobile .table-wrap { border: 0; background: transparent; }
+
+  /* The trip grid is unlabelled on a phone, so "Start" and "End" become two bare
+     clock times on opposite sides of the card with nothing to tell them apart. */
+  .trips-table-row > span[data-label] { display: flex; flex-direction: column; }
+  .trips-table-row > span[data-label]::before {
+    content: attr(data-label);
+    font-size: 9.5px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  /* The mobile bell is the only alert affordance on a phone (the topbar copy is
+     display: none), so the unread count has to live on it. */
+  .menu-toggle .count-badge { display: grid; top: 2px; right: 2px; }
+
+  /* ---- Cards get tighter so more of the 390px is content ---- */
+  .card { padding: 16px 14px; }
+  .map-card > .card-head, .map-card .replay, .map-panel > .card-head { padding-left: 14px; padding-right: 14px; }
+  .map-card .empty-state, .map-card .center-state { padding: 48px 16px; }
+
+  /* ---- Unbreakable values: the API allows 80-char device names, 120-char
+         technician names, 60-char employee numbers and uncapped emails. None of
+         them may paint outside the box that holds them. ---- */
+  .tech-info, .trip-info, .map-selected-head .who, .profile-head > div,
+  .kv > *, .bar-row > *, .data-table td, .muted, .bullets li,
+  .activity-body > *, .activity-body, .trips-table-row > span, .trips-table-row strong,
+  .trips-table-row small, .tech-meta, .trip-meta, .server-address,
+  .trip-summary, .settings-row .grow, .card {
+    overflow-wrap: anywhere;
+  }
+  .data-table td, .trips-table-row > span, .activity-body, .tech-info, .trip-info { min-width: 0; }
+
+  /* ---- Rows that must wrap instead of pushing each other off-screen ---- */
+  .tech-row, .trip-row, .device-row { flex-wrap: wrap; }
+  .tech-row .row-actions, .trip-row .row-actions, .device-row .row-actions {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .row-actions { flex-wrap: wrap; flex-shrink: 1; }
+  .map-selected-head, .profile-head, .activity-item { flex-wrap: wrap; }
+  .activity-time { margin-left: 44px; }
+  .kv { flex-wrap: wrap; }
+
+  /* ---- 44px tap targets ---- */
+  .link { min-height: 40px; min-width: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  .segmented button { min-height: 44px; }
+  .play-chip { width: 44px; height: 44px; }
+  .play-chip svg { width: 18px; height: 18px; }
+  .icon-color-input { width: 44px; height: 44px; }
+  .timeline { min-height: 44px; }
+  .password-peek { width: 44px; height: 44px; right: 0; }
+  .password-wrap input { padding-right: 48px; }
+  input[type='color'] { height: 44px; }
+
+  /* ---- Setup guide: the 150px illustration column is the parent grid's
+         business, not the card's. Collapsing only the outer grid left every
+         step's instructions in a 148px ribbon. ---- */
+  .setup-step { grid-template-columns: 1fr; justify-items: center; gap: 14px; }
+
+  /* ---- Long secrets must not become a horizontal scrollbar in the modal ---- */
+  .pairing-code strong { font-size: clamp(18px, 7vw, 32px); letter-spacing: 2px; overflow-wrap: anywhere; }
+
+  /* ---- Replay readout: 3 x 1fr is at its min-content for "9:14:05 AM" ---- */
+  .replay-readout { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+  .replay-readout > * { min-width: 0; }
+  .replay-readout strong { font-size: 15px; overflow-wrap: anywhere; }
 }
 
+@media (max-width: 480px) {
+  .auth-card { padding: 24px 18px; }
+  .auth-card.wide { padding: 20px 16px; }
+}

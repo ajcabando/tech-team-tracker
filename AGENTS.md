@@ -27,6 +27,10 @@ cd backend && npm test                       # vitest — GPS math, trips, token
 bash scripts/e2e-api.sh                      # curl-based, needs running stack + seeded admin
 node scripts/e2e-browser.mjs                 # headless Chrome, needs CHROME_PATH if non-standard
 
+# Mobile layout gate (see "Mobile layout is a gate, not a screenshot" below)
+node scripts/audit-mobile-selftest.mjs        # proves the audit can still fail
+node scripts/audit-mobile.mjs                 # 13 routes x 3 widths x 2 themes; exits 1 on any defect
+
 # Android
 # Open android/ in Android Studio (SDK 35, JDK 17) → Build → Make Project
 # Emulator server URL: http://10.0.2.2:5789
@@ -105,6 +109,12 @@ backend/prisma/
 - **`BOOT_COMPLETED` may start a location FGS** — it is an explicit exemption, and `location` is not on Android 15's boot-receiver blocklist (`dataSync`, `camera`, `mediaPlayback`, `phoneCall`, `mediaProjection`, `microphone`). `location` also has no runtime cap, unlike `dataSync`.
 - **Nothing can be done about OEM battery killing from code** — Android's own Doze does not kill a location FGS, but Samsung/Xiaomi/Huawei layers do. It is handled by a one-time in-app prompt plus a per-manufacturer checklist on the Android setup page, and the real backstop is the server-side device-offline watchdog.
 - **No API can disable the mobile hotspot** — `WifiManager.setWifiApEnabled` is `@hide` at every API level and there is no DPM policy for tethering. Only Device Owner can do it, which the project does not use. Do not attempt reflection.
+- **Mobile layout is a gate, not a screenshot** — `scripts/audit-mobile.mjs` walks 13 routes at 360/390/430px in both themes, at every scroll offset, and fails on `overlap` (text painted over text), `occluded` (a sticky bar swallowed by the sticky header), `overflow` (content wider than its box or past the viewport), `scroll-clip`, and `tap` targets under 40px. It exits 1. Run it after any change to `styles.css` or to a page's markup.
+- **The mobile audit is meaningless without hostile data** — the bugs are caused by long *unbroken* tokens, and demo seed data has short realistic names. Load `scripts/audit-adversarial-data.sql` (120-char technician name, 80-char device name, 60-char employee number, uncapped email, 80-char company name — each at its real schema maximum) before auditing, and run `scripts/audit-adversarial-data-cleanup.sql` afterwards. It exits 1.
+- **Never trust a passing audit until the self-test passes** — `scripts/audit-mobile-selftest.mjs` injects each original bug back as a stylesheet and asserts the detectors still fire, and first asserts the page is clean. A detector weakened into silence would otherwise make the layout audit pass forever.
+- **Two sticky bars cannot share `top: 0`** — `.mobile-header` and `.topbar` both were `position: sticky; top: 0`, so on a phone the topbar pinned underneath the opaque header and the search field became unreadable *and* untappable on every scrolled page. `.topbar` is `position: static` under 720px for that reason; do not make it sticky again.
+- **Unbreakable values need `overflow-wrap: anywhere`, never `break-word`** — only `anywhere` shrinks min-content, and a flex item's `min-width: auto` *is* its min-content. A 120-char technician name in a `break-word` heading still refuses to shrink and widens the whole page to ~1975px on a 390px screen.
+- **A single-file bind mount becomes a directory under Colima** — `docker-compose.yml` bind-mounts `./VERSION` to `/app/VERSION`, which works on Docker Desktop but silently creates a directory under Colima, so `/health/version` returns `{"version":"unknown"}` and the UI shows "Build vunknown". Set `APP_VERSION` in `.env` (loaded via `env_file`) to work around it.
 
 ## Code conventions
 
