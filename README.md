@@ -382,7 +382,7 @@ The shell has a **breadcrumb trail** for the current route and a **collapsible s
 | **Trips** | Filter by technician and date range, grouped by day, totals |
 | **Trip detail** | Start/end, distance, speeds, stops, route map, replay player |
 | **Reports** | Daily / weekly / monthly totals and per-technician breakdown |
-| **Alerts** | Low battery, poor GPS, offline devices; acknowledge to clear |
+| **Alerts** | Low battery, poor GPS, offline devices; acknowledging deletes the alert |
 | **Settings** | Branding, tracking intervals, retention, account password, server status |
 | **System admin** | *(superadmin)* organizations, users, audit log |
 | **About** | Product, privacy, support contact, API docs link |
@@ -424,6 +424,7 @@ All configuration is environment-driven. See [`.env.example`](.env.example).
 | `JWT_REFRESH_SECRET` | Refresh-token signing key (**required**) | dev placeholder |
 | `ACCESS_TOKEN_TTL` | Access-token lifetime | `15m` |
 | `REFRESH_TOKEN_DAYS` | Refresh-token lifetime | `30` |
+| `REMEMBER_ME_DAYS` | Lifetime of a "Remember me" sign-in, counted from login | `1` |
 | `API_PORT` / `FRONTEND_PORT` | Host ports | `5789` / `5788` |
 | `CORS_ORIGIN` | Allowed browser origins (comma-separated) | `http://localhost:5788` |
 | `VITE_API_URL` | API base URL baked into the dashboard build (empty = same origin) | *(empty)* |
@@ -488,7 +489,7 @@ POST   /api/settings                       update branding
 GET/PUT /api/settings/tracking             adaptive interval settings
 GET/PUT /api/settings/retention            retention windows
 GET    /api/alerts                         alerts
-POST   /api/alerts/:id/acknowledge         acknowledge
+POST   /api/alerts/:id/acknowledge         acknowledge (deletes the alert)
 GET    /api/audit-logs                     audit trail
 POST   /api/maintenance/retention          apply retention now
 GET    /health, /health/database, /health/version

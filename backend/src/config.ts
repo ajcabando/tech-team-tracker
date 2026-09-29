@@ -40,6 +40,8 @@ export const config = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'development-only-refresh-change-me',
   accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '15m',
   refreshTokenDays: int('REFRESH_TOKEN_DAYS', 30),
+  /** Hard cap on a "Remember me" sign-in, measured from the original login. */
+  rememberMeDays: int('REMEMBER_ME_DAYS', 1),
   corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:3000')
     .split(',')
     .map((value) => value.trim())

@@ -8,13 +8,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
     } catch (thrown) {
       setError((thrown as { message?: string })?.message || 'Sign in failed');
     } finally {
@@ -96,6 +97,25 @@ export function LoginPage() {
               required
               autoComplete="current-password"
             />
+          </div>
+
+          <div className="login-remember">
+            {/*
+              The native checkbox is sr-only so the label is the pointer target: a bare
+              input is ~16px and fails the mobile audit's 40px tap gate. Keyboard focus
+              and screen-reader semantics stay on the real input.
+            */}
+            <input
+              id="login-remember"
+              type="checkbox"
+              className="sr-only"
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+            />
+            <label htmlFor="login-remember">Remember me</label>
+            <p className="login-remember-hint">
+              {rememberMe ? 'Ticked: you stay signed in for 1 day.' : 'Unticked: default session length.'}
+            </p>
           </div>
 
           <ErrorNote message={error} />

@@ -38,18 +38,34 @@ export function randomToken(bytes = 48): string {
   return crypto.randomBytes(bytes).toString('base64url');
 }
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+/**
+ * Issues a refresh token for one session tier.
+ *
+ * `rememberMe` is the "sign in for a day" tier: its expiry is a hard cap counted
+ * from the original login (`expiresAt` passed in by the caller on rotation), not
+ * from the last refresh, so an active tab cannot keep a remembered session alive
+ * indefinitely. Without it the ordinary REFRESH_TOKEN_DAYS applies, unchanged.
+ */
+export async function issueRefreshToken(userId: string, rememberMe = false, expiresAt?: Date): Promise<string> {
   const raw = randomToken();
-  const expiresAt = new Date(Date.now() + config.refreshTokenDays * 24 * 60 * 60 * 1000);
-  await db.refreshToken.create({ data: { userId, tokenHash: hashToken(raw), expiresAt } });
+  const lifetime = rememberMe ? config.rememberMeDays * 24 * 60 * 60 * 1000 : config.refreshTokenDays * 24 * 60 * 60 * 1000;
+  const expiry = expiresAt ?? new Date(Date.now() + lifetime);
+  await db.refreshToken.create({ data: { userId, tokenHash: hashToken(raw), expiresAt: expiry, rememberMe } });
   return raw;
 }
 
-export async function rotateRefreshToken(raw: string): Promise<{ userId: string; refreshToken: string } | null> {
+export async function rotateRefreshToken(raw: string): Promise<{ userId: string; refreshToken: string; rememberMe: boolean } | null> {
   const stored = await db.refreshToken.findUnique({ where: { tokenHash: hashToken(raw) } });
   if (!stored || stored.revokedAt || stored.expiresAt.getTime() < Date.now()) return null;
   await db.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
-  return { userId: stored.userId, refreshToken: await issueRefreshToken(stored.userId) };
+  // The replacement inherits the tier, and a remembered one inherits the original
+  // deadline too — otherwise the 1-day cap would silently renew on every refresh.
+  const expiresAt = stored.rememberMe ? stored.expiresAt : undefined;
+  return {
+    userId: stored.userId,
+    refreshToken: await issueRefreshToken(stored.userId, stored.rememberMe, expiresAt),
+    rememberMe: stored.rememberMe,
+  };
 }
 
 /**

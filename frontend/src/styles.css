@@ -295,6 +295,56 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
+/* ---------- Remember me ---------- */
+.login-remember {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin: -4px 0 16px;
+}
+.login-remember label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px; /* the real pointer target — the native input is sr-only */
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+/* The native checkbox is visually hidden, so the box is drawn on the label. */
+.login-remember input + label::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--input-border);
+  border-radius: 5px;
+  background: var(--input-bg);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.login-remember input:checked + label::before {
+  content: '\2713';
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.login-remember input:focus-visible + label::before {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.login-remember-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ---------- Login submit ---------- */
 .login-submit {
   width: 100%;

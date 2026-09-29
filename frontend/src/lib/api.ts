@@ -55,20 +55,51 @@ async function parse(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * Single-flight refresh.
+ *
+ * The refresh token is single-use: the server revokes it on rotation, so N
+ * parallel 401s refreshing the same token would yield N-1 failures. Every
+ * caller therefore shares one in-flight refresh, and only a definitive 401/403
+ * from the refresh endpoint clears tokens — a 429, 5xx, or network blip must
+ * leave the session intact or one rate-limited blip would sign everyone out.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
 async function refreshSession(): Promise<boolean> {
   if (!refreshToken) return false;
-  const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (!response.ok) {
-    setTokens(null, null);
-    return false;
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const current = refreshToken;
+    if (!current) return false;
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: current }),
+      });
+    } catch {
+      // Network failure: the session is not provably dead, so leave it alone.
+      return false;
+    }
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) setTokens(null, null);
+      return false;
+    }
+    const data = (await parse(response)) as { accessToken: string; refreshToken: string };
+    setTokens(data.accessToken, data.refreshToken);
+    return true;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    // Cleared only after it settles, so a later expiry can refresh again while
+    // concurrent callers still join this one.
+    refreshInFlight = null;
   }
-  const data = (await parse(response)) as { accessToken: string; refreshToken: string };
-  setTokens(data.accessToken, data.refreshToken);
-  return true;
 }
 
 type Options = { method?: string; body?: unknown; auth?: boolean; retry?: boolean };
@@ -76,7 +107,8 @@ type Options = { method?: string; body?: unknown; auth?: boolean; retry?: boolea
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (options.auth !== false && accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const sentToken = options.auth === false ? null : accessToken;
+  if (sentToken) headers.Authorization = `Bearer ${sentToken}`;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || 'GET',
@@ -85,6 +117,9 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   });
 
   if (response.status === 401 && options.auth !== false && options.retry !== false) {
+    // If the token on file has changed since this request went out, a concurrent
+    // caller already rotated it — retry with that one instead of refreshing again.
+    if (accessToken && sentToken && accessToken !== sentToken) return api<T>(path, { ...options, retry: false });
     if (await refreshSession()) return api<T>(path, { ...options, retry: false });
   }
   if (!response.ok) {
@@ -106,9 +141,12 @@ export async function uploadAsset(kind: 'logo' | 'background', file: File): Prom
   form.append('kind', kind);
   form.append('file', file);
   const headers: Record<string, string> = {};
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const sentToken = accessToken;
+  if (sentToken) headers.Authorization = `Bearer ${sentToken}`;
   const response = await fetch(`${API_BASE}/api/settings/assets`, { method: 'POST', headers, body: form });
   if (response.status === 401) {
+    // Same rule as api(): a token rotated by a concurrent caller needs no refresh.
+    if (accessToken && sentToken && accessToken !== sentToken) return uploadAsset(kind, file);
     if (await refreshSession()) return uploadAsset(kind, file);
   }
   if (!response.ok) {

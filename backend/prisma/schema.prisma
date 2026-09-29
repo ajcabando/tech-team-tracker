@@ -86,12 +86,14 @@ model User {
 }
 
 model RefreshToken {
-  id        String    @id @default(uuid())
-  userId    String
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  /** Session tier: a "Remember me" sign-in is capped at REMEMBER_ME_DAYS from login. */
+  rememberMe Boolean   @default(false)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
 }

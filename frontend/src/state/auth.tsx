@@ -36,7 +36,7 @@ type AuthValue = {
   branding: Branding;
   ready: boolean;
   setupRequired: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe: boolean) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   reloadBranding: () => Promise<void>;
@@ -112,10 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [branding]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, rememberMe: boolean) => {
       const result = await api<{ accessToken: string; refreshToken: string; user: SessionUser; branding: Branding | null }>('/api/auth/login', {
         method: 'POST',
-        body: { email, password },
+        body: { email, password, rememberMe },
         auth: false,
       });
       setTokens(result.accessToken, result.refreshToken);

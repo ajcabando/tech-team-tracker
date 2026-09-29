@@ -24,7 +24,9 @@ authRouter.get('/api/branding/public', asyncHandler(async (_req, res) => {
 }));
 
 authRouter.post('/api/auth/login', asyncHandler(async (req, res) => {
-  const parsed = z.object({ email: z.string().email(), password: z.string().min(1) }).safeParse(req.body);
+  const parsed = z
+    .object({ email: z.string().email(), password: z.string().min(1), rememberMe: z.boolean().optional().default(false) })
+    .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Valid email and password are required' });
 
   const user = await db.user.findUnique({ where: { email: parsed.data.email.toLowerCase() }, include: { organization: true } });
@@ -43,13 +45,14 @@ authRouter.post('/api/auth/login', asyncHandler(async (req, res) => {
   }
 
   await db.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
-  const refreshToken = await issueRefreshToken(user.id);
+  const refreshToken = await issueRefreshToken(user.id, parsed.data.rememberMe);
   const branding = user.organizationId ? await db.branding.findUnique({ where: { organizationId: user.organizationId } }) : null;
   await db.auditLog.create({ data: { userId: user.id, organizationId: user.organizationId, action: 'auth.login', resource: 'User', resourceId: user.id, ipAddress: clientIp(req), result: 'SUCCESS' } });
 
   return res.json({
     accessToken: token({ id: user.id, organizationId: user.organizationId || undefined, role: user.role }),
     refreshToken,
+    rememberMe: parsed.data.rememberMe,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId },
     branding,
   });
@@ -65,6 +68,7 @@ authRouter.post('/api/auth/refresh', asyncHandler(async (req, res) => {
   res.json({
     accessToken: token({ id: user.id, organizationId: user.organizationId || undefined, role: user.role }),
     refreshToken: rotated.refreshToken,
+    rememberMe: rotated.rememberMe,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId },
   });
 }));
