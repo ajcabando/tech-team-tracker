@@ -46,7 +46,7 @@ vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
 });
 
 let api: (typeof import('../lib/api'))['api'];
-let setTokens: (access: string | null, refresh: string | null) => void;
+let setTokens: (access: string | null, refresh: string | null, remembered?: boolean) => void;
 let getAccessToken: () => string | null;
 let getRefreshToken: () => string | null;
 
@@ -183,5 +183,58 @@ describe('concurrent callers that lose the race', () => {
     expect(refreshCalls).toHaveLength(0);
     const deviceCalls = fetchCalls.filter((call) => call.url.includes('/api/devices'));
     expect(deviceCalls).toHaveLength(2);
+  });
+});
+
+describe('session tier storage', () => {
+  it('stores a remembered session in localStorage only', () => {
+    setTokens('a', 'b', true);
+    expect(localStorage.getItem('tracker.accessToken')).toBe('a');
+    expect(localStorage.getItem('tracker.refreshToken')).toBe('b');
+    expect(sessionStorage.getItem('tracker.accessToken')).toBeNull();
+    expect(sessionStorage.getItem('tracker.refreshToken')).toBeNull();
+  });
+
+  it('stores an ordinary session in sessionStorage only', () => {
+    setTokens('a', 'b', false);
+    expect(sessionStorage.getItem('tracker.accessToken')).toBe('a');
+    expect(sessionStorage.getItem('tracker.refreshToken')).toBe('b');
+    expect(localStorage.getItem('tracker.accessToken')).toBeNull();
+    expect(localStorage.getItem('tracker.refreshToken')).toBeNull();
+  });
+
+  it('clears both stores on sign-out regardless of tier', () => {
+    setTokens('a', 'b', true);
+    setTokens(null, null);
+    expect(localStorage.getItem('tracker.refreshToken')).toBeNull();
+    expect(sessionStorage.getItem('tracker.refreshToken')).toBeNull();
+    setTokens('c', 'd', false);
+    setTokens(null, null);
+    expect(localStorage.getItem('tracker.refreshToken')).toBeNull();
+    expect(sessionStorage.getItem('tracker.refreshToken')).toBeNull();
+  });
+
+  it('picks a tab-only session back up when the module is reloaded', async () => {
+    setTokens('tab-access', 'tab-refresh', false);
+    vi.resetModules();
+    const fresh = await import('../lib/api');
+    expect(fresh.getAccessToken()).toBe('tab-access');
+    expect(fresh.getRefreshToken()).toBe('tab-refresh');
+  });
+
+  it('keeps a remembered session in localStorage across a rotation', async () => {
+    setTokens('stale-access-token', 'valid-refresh-token', true);
+    fetchImpl = async (url, init) => {
+      if (url.includes('/api/auth/refresh')) {
+        // The server may echo no tier at all — the client must not downgrade on that.
+        return jsonResponse(200, { accessToken: 'fresh-access', refreshToken: 'fresh-refresh' });
+      }
+      const auth = (init?.headers as Record<string, string>)?.Authorization ?? '';
+      return auth === 'Bearer fresh-access' ? jsonResponse(200, []) : jsonResponse(401, { error: 'expired' });
+    };
+    await expect(api('/api/devices')).resolves.toEqual([]);
+    expect(localStorage.getItem('tracker.refreshToken')).toBe('fresh-refresh');
+    expect(sessionStorage.getItem('tracker.refreshToken')).toBeNull();
+    expect(getRefreshToken()).toBe('fresh-refresh');
   });
 });

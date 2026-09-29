@@ -31,6 +31,24 @@ test "$(printf '%s' "$me" | json_value role)" = SUPERADMIN || fail "superadmin r
 anon_status=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/auth/me")
 test "$anon_status" = 401 || fail "unauthenticated /me should be 401"
 
+# The refresh token is single-use: two refreshes fired at the SAME token, at the
+# same time, must yield exactly one 200 and one rejection. This is the
+# server-side premise the dashboard's single-flight client refresh relies on —
+# without it, the 5-request poll burst races itself into a forced logout.
+race_login=$(curl -fsS -X POST "$API_URL/api/auth/login" -H 'Content-Type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+race_token=$(printf '%s' "$race_login" | json_value refreshToken)
+race_code1=$(mktemp)
+race_code2=$(mktemp)
+curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/auth/refresh" -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$race_token\"}" > "$race_code1" &
+curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/auth/refresh" -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$race_token\"}" > "$race_code2" &
+wait
+race_status="$(cat "$race_code1")/$(cat "$race_code2")"
+rm -f "$race_code1" "$race_code2"
+case "$race_status" in
+  200/401|401/200) ;;
+  *) fail "concurrent refresh must yield exactly one 200 and one 401 (got $race_status)" ;;
+esac
+
 echo "== technicians + devices =="
 suffix=$(date +%s)
 tech=$(curl -fsS -X POST "$API_URL/api/technicians" -H "Authorization: Bearer $admin_token" -H 'Content-Type: application/json' -d "{\"name\":\"E2E Technician\",\"employeeNumber\":\"E2E-$suffix\"}")
@@ -220,4 +238,4 @@ test "$status" = 401 || fail "a removed account must not be able to sign in (got
 status=$(http_status -X POST "$API_URL/api/auth/refresh" -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$u_refresh\"}")
 test "$status" = 401 || fail "a removed account's sessions must be revoked (got $status)"
 
-echo "E2E passed: health, setup state, auth + refresh, technician setup, single-use pairing, device-token isolation, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."
+echo "E2E passed: health, setup state, auth + refresh (including concurrent single-use rotation), technician setup, single-use pairing, device-token isolation, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."

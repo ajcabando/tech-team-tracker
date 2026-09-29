@@ -113,12 +113,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, rememberMe: boolean) => {
-      const result = await api<{ accessToken: string; refreshToken: string; user: SessionUser; branding: Branding | null }>('/api/auth/login', {
+      const result = await api<{ accessToken: string; refreshToken: string; rememberMe?: boolean; user: SessionUser; branding: Branding | null }>('/api/auth/login', {
         method: 'POST',
         body: { email, password, rememberMe },
         auth: false,
       });
-      setTokens(result.accessToken, result.refreshToken);
+      // The server's echo decides where the tokens are kept, so storage always
+      // matches the tier that was actually granted.
+      setTokens(result.accessToken, result.refreshToken, result.rememberMe ?? rememberMe);
       setUser(result.user);
       if (result.branding) setBranding((current) => ({ ...current, ...result.branding }));
       else await reloadBranding();

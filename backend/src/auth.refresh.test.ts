@@ -8,13 +8,13 @@ process.env.REFRESH_TOKEN_DAYS = '30';
 
 const create = vi.fn();
 const findUnique = vi.fn();
-const update = vi.fn();
+const updateMany = vi.fn();
 vi.mock('./db', () => ({
   db: {
     refreshToken: {
       create: (...args: unknown[]) => create(...args),
       findUnique: (...args: unknown[]) => findUnique(...args),
-      update: (...args: unknown[]) => update(...args),
+      updateMany: (...args: unknown[]) => updateMany(...args),
     },
   },
 }));
@@ -31,7 +31,7 @@ beforeAll(async () => {
 beforeEach(() => {
   create.mockReset();
   findUnique.mockReset();
-  update.mockReset();
+  updateMany.mockReset();
 });
 
 describe('issueRefreshToken tiers', () => {
@@ -67,7 +67,7 @@ describe('rotateRefreshToken tier propagation', () => {
   it('carries the remembered tier onto the replacement token', async () => {
     create.mockResolvedValue({});
     findUnique.mockResolvedValue({ id: 'row-1', userId: 'user-1', rememberMe: true, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
-    update.mockResolvedValue({});
+    updateMany.mockResolvedValue({ count: 1 });
     const rotated = await rotateRefreshToken('some-raw-token');
     expect(rotated).not.toBeNull();
     expect(rotated!.rememberMe).toBe(true);
@@ -78,7 +78,7 @@ describe('rotateRefreshToken tier propagation', () => {
     create.mockResolvedValue({});
     const originalExpiry = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6h left of the day
     findUnique.mockResolvedValue({ id: 'row-1', userId: 'user-1', rememberMe: true, revokedAt: null, expiresAt: originalExpiry });
-    update.mockResolvedValue({});
+    updateMany.mockResolvedValue({ count: 1 });
     await rotateRefreshToken('some-raw-token');
     // Renewing must not push the deadline out, or an active tab would stay
     // signed in forever and "1 day" would mean "1 day per refresh".
@@ -88,7 +88,7 @@ describe('rotateRefreshToken tier propagation', () => {
   it('carries the ordinary tier onto the replacement token with a fresh window', async () => {
     create.mockResolvedValue({});
     findUnique.mockResolvedValue({ id: 'row-1', userId: 'user-1', rememberMe: false, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
-    update.mockResolvedValue({});
+    updateMany.mockResolvedValue({ count: 1 });
     const rotated = await rotateRefreshToken('some-raw-token');
     expect(rotated).not.toBeNull();
     expect(rotated!.rememberMe).toBe(false);
@@ -100,9 +100,16 @@ describe('rotateRefreshToken tier propagation', () => {
   it('revokes the old row before issuing the replacement', async () => {
     create.mockResolvedValue({});
     findUnique.mockResolvedValue({ id: 'row-1', userId: 'user-1', rememberMe: true, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
-    update.mockResolvedValue({});
+    updateMany.mockResolvedValue({ count: 1 });
     await rotateRefreshToken('some-raw-token');
-    expect(update).toHaveBeenCalledWith({ where: { id: 'row-1' }, data: { revokedAt: expect.any(Date) } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'row-1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+  });
+
+  it('returns null when a concurrent rotation already claimed the row', async () => {
+    findUnique.mockResolvedValue({ id: 'row-1', userId: 'user-1', rememberMe: false, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
+    updateMany.mockResolvedValue({ count: 0 }); // the other request won the guarded UPDATE
+    expect(await rotateRefreshToken('some-raw-token')).toBeNull();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('returns null for an already-revoked token', async () => {

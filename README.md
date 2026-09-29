@@ -693,6 +693,7 @@ Schedule `scripts/backup.sh` with cron and **test a restore** before you need on
 - HTTPS termination at the reverse proxy; secrets only in `.env`
 - bcrypt password hashing (cost 12); no plaintext credentials anywhere
 - Short-lived access tokens with rotating, revocable refresh tokens
+- Session length is server-enforced: ticking **Remember me** caps the sign-in at `REMEMBER_ME_DAYS` (1 day by default, counted from login) and keeps it in `localStorage`; leaving it unticked stores the session in `sessionStorage`, so it dies with the tab
 - Role-based access control plus organization-level data isolation
 - Device tokens are strictly separated from user sessions
 - Rate limiting on all routes, with a stricter window for login/refresh/pairing

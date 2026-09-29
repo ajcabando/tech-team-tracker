@@ -13,8 +13,21 @@ export const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ||
 const ACCESS_KEY = 'tracker.accessToken';
 const REFRESH_KEY = 'tracker.refreshToken';
 
-let accessToken = localStorage.getItem(ACCESS_KEY);
-let refreshToken = localStorage.getItem(REFRESH_KEY);
+/**
+ * Two storage tiers. A "Remember me" session lives in localStorage and survives a
+ * browser restart; an ordinary one lives in sessionStorage, so it survives a reload
+ * but dies with the tab. The stores are kept mutually exclusive, which makes
+ * localStorage the single source of truth for the tier on load.
+ */
+function loadTokens(): { access: string | null; refresh: string | null; remembered: boolean } {
+  const storedRefresh = localStorage.getItem(REFRESH_KEY);
+  if (storedRefresh) return { access: localStorage.getItem(ACCESS_KEY), refresh: storedRefresh, remembered: true };
+  return { access: sessionStorage.getItem(ACCESS_KEY), refresh: sessionStorage.getItem(REFRESH_KEY), remembered: false };
+}
+
+const initialTokens = loadTokens();
+let accessToken = initialTokens.access;
+let refreshToken = initialTokens.refresh;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -27,13 +40,24 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
-export function setTokens(access: string | null, refresh: string | null): void {
+export function setTokens(access: string | null, refresh: string | null, remembered = false): void {
   accessToken = access;
   refreshToken = refresh;
-  if (access) localStorage.setItem(ACCESS_KEY, access);
-  else localStorage.removeItem(ACCESS_KEY);
-  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-  else localStorage.removeItem(REFRESH_KEY);
+  if (access && refresh) {
+    const target = remembered ? localStorage : sessionStorage;
+    const other = remembered ? sessionStorage : localStorage;
+    target.setItem(ACCESS_KEY, access);
+    target.setItem(REFRESH_KEY, refresh);
+    other.removeItem(ACCESS_KEY);
+    other.removeItem(REFRESH_KEY);
+  } else {
+    // Sign-out empties BOTH stores — otherwise a tab-only session would outlive
+    // an explicit sign-out.
+    for (const store of [localStorage, sessionStorage]) {
+      store.removeItem(ACCESS_KEY);
+      store.removeItem(REFRESH_KEY);
+    }
+  }
   emit();
 }
 
@@ -88,8 +112,10 @@ async function refreshSession(): Promise<boolean> {
       if (response.status === 401 || response.status === 403) setTokens(null, null);
       return false;
     }
-    const data = (await parse(response)) as { accessToken: string; refreshToken: string };
-    setTokens(data.accessToken, data.refreshToken);
+    const data = (await parse(response)) as { accessToken: string; refreshToken: string; rememberMe?: boolean };
+    // Rotation must never silently downgrade the tier: prefer what the server
+    // echoes, else keep the store the session is currently living in.
+    setTokens(data.accessToken, data.refreshToken, data.rememberMe ?? localStorage.getItem(REFRESH_KEY) !== null);
     return true;
   })();
 

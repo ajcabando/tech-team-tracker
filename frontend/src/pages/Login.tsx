@@ -114,7 +114,7 @@ export function LoginPage() {
             />
             <label htmlFor="login-remember">Remember me</label>
             <p className="login-remember-hint">
-              {rememberMe ? 'Ticked: you stay signed in for 1 day.' : 'Unticked: default session length.'}
+              {rememberMe ? 'Ticked: you stay signed in for 1 day.' : 'Unticked: this session ends when you close the tab.'}
             </p>
           </div>
 

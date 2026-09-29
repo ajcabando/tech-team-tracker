@@ -57,7 +57,15 @@ export async function issueRefreshToken(userId: string, rememberMe = false, expi
 export async function rotateRefreshToken(raw: string): Promise<{ userId: string; refreshToken: string; rememberMe: boolean } | null> {
   const stored = await db.refreshToken.findUnique({ where: { tokenHash: hashToken(raw) } });
   if (!stored || stored.revokedAt || stored.expiresAt.getTime() < Date.now()) return null;
-  await db.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
+  // Claim the row with a guarded UPDATE rather than a plain one: two rotations
+  // racing on the same token serialize on the row lock, and only the winner sees
+  // revokedAt IS NULL — so "single-use" holds under real concurrency, not just
+  // when the requests happen to be processed one after the other.
+  const claimed = await db.refreshToken.updateMany({
+    where: { id: stored.id, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  if (claimed.count === 0) return null;
   // The replacement inherits the tier, and a remembered one inherits the original
   // deadline too — otherwise the 1-day cap would silently renew on every refresh.
   const expiresAt = stored.rememberMe ? stored.expiresAt : undefined;
