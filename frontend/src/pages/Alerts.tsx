@@ -20,13 +20,12 @@ export function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [unreadOnly, setUnreadOnly] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const query = unreadOnly ? '?acknowledged=false&limit=100' : '?limit=100';
-      setAlerts(await api<Alert[]>(`/api/alerts${query}`));
+      // Acknowledged alerts are deleted, so every row on screen is an open one.
+      setAlerts(await api<Alert[]>('/api/alerts?limit=100'));
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? 'Failed to load alerts');
     } finally {
@@ -37,27 +36,20 @@ export function AlertsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadOnly]);
+  }, []);
 
   async function acknowledge(alert: Alert) {
     try {
       await api(`/api/alerts/${alert.id}/acknowledge`, { method: 'POST' });
-      await load();
+      // The server deletes the row, so drop it from the list straight away.
+      setAlerts((current) => current.filter((item) => item.id !== alert.id));
     } catch (thrown) {
       setError((thrown as { message?: string })?.message ?? 'Failed to acknowledge alert');
     }
   }
 
   return (
-    <AppShell
-      title="Alerts"
-      subtitle="MONITORING"
-      actions={
-        <button className={unreadOnly ? 'chip active' : 'chip'} onClick={() => setUnreadOnly(!unreadOnly)}>
-          {unreadOnly ? 'Showing unacknowledged' : 'Show unacknowledged only'}
-        </button>
-      }
-    >
+    <AppShell title="Alerts" subtitle="MONITORING">
       <ErrorNote message={error} />
       <Card title={`${alerts.length} alert${alerts.length === 1 ? '' : 's'}`} action={<button className="link" onClick={() => void load()}>Refresh</button>}>
         {loading && <Spinner />}
@@ -73,7 +65,9 @@ export function AlertsPage() {
               </small>
             </div>
             <div className="row-actions">
-              {alert.acknowledgedAt ? <small className="muted">Acknowledged</small> : <button className="outline" onClick={() => void acknowledge(alert)}>Acknowledge</button>}
+              {/* Always offered: acknowledging is what clears the alert, so even a row
+                  stamped before the purge migration can be dismissed here. */}
+              <button className="outline" onClick={() => void acknowledge(alert)}>Acknowledge</button>
             </div>
           </div>
         ))}

@@ -26,7 +26,10 @@ alertsRouter.get('/api/alerts', auth, asyncHandler(async (req: AuthedRequest, re
 alertsRouter.post('/api/alerts/:id/acknowledge', auth, asyncHandler(async (req: AuthedRequest, res) => {
   const alert = await db.alert.findFirst({ where: { id: String(req.params.id), ...orgScope(req.user) } });
   if (!alert) return res.status(404).json({ error: 'Alert not found' });
-  const updated = await db.alert.update({ where: { id: alert.id }, data: { acknowledgedAt: new Date() } });
+  // Acknowledging is how an alert is cleared: the row is deleted rather than
+  // stamped, so the list, the bell, and the dashboard feed only ever carry open
+  // alerts. deleteMany keeps this idempotent if two operators click at once.
+  await db.alert.deleteMany({ where: { id: alert.id } });
   await audit({ req, action: 'alert.acknowledge', resource: 'Alert', resourceId: alert.id, organizationId: alert.organizationId });
-  res.json(updated);
+  res.json({ ok: true, id: alert.id });
 }));
