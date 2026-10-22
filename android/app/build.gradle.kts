@@ -37,8 +37,9 @@ android {
         minSdk = 26
         targetSdk = 35
         // Must increase on every release. 7 was published as 0.3.3 (code 6);
-        // 0.3.4 is the first release built from the VERSION file.
-        versionCode = 7
+        // 0.3.4 is the first release built from the VERSION file. 8 is 0.3.5,
+        // the release that resumes tracking after an in-place APK update.
+        versionCode = 8
         versionName = releaseVersion
     }
 

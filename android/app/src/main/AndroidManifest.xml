@@ -27,9 +27,15 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
 
+        <!--
+          excludeFromRecents keeps the task card out of Recents. Tracking is a
+          foreground service and survives the card being swiped away anyway, so
+          hiding it only removes the illusion that swiping it stopped anything.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -40,7 +46,8 @@
         <service
             android:name=".TrackingService"
             android:foregroundServiceType="location"
-            android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="false" />
 
         <receiver
             android:name=".BootReceiver"
@@ -48,6 +55,20 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          An in-place APK update kills the process and nothing restarts the
+          service until the next reboot, so a routine fleet update would
+          silently stop tracking on every phone it touched.
+        -->
+        <receiver
+            android:name=".PackageReplacedReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
