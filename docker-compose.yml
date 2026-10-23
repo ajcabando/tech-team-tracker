@@ -32,6 +32,10 @@ services:
       # Single source of truth for the release version, also consumed by the
       # dashboard via /health/version. Read-only: the backend never writes it.
       - ./VERSION:/app/VERSION:ro
+      # The published APK and the tracker.apk.json sidecar that describes it, so
+      # /api/device/update can offer it to paired phones. Also read-only: the
+      # backend only reads, and publish-apk.sh writes on the host.
+      - ./apk:/app/apk:ro
     depends_on:
       postgres:
         condition: service_healthy

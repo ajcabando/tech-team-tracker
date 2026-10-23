@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exposes only the private updates directory to the system package installer.
+  The APK is downloaded to filesDir/updates and shared as a content:// URI, which
+  is required from Android 7 on: a file:// URI in an install intent throws
+  FileUriExposedException. Nothing else in the app's files is reachable.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="updates" path="updates/" />
+</paths>

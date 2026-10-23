@@ -12,6 +12,13 @@ import java.net.URL
 /** The server rejected the device credential: the administrator unpaired or disabled it. */
 class DeviceRevokedException(message: String) : Exception(message)
 
+/**
+ * The server requires a fresh device-admin password verification before it will
+ * authorize privileged work. The UI answers this by asking for the password once,
+ * never by retrying blindly.
+ */
+class AdminVerificationRequiredException : Exception("Admin verification required")
+
 internal fun normalizeServerUrl(rawUrl: String): String {
     val url = runCatching { URL(rawUrl.trim()) }.getOrElse { error("Enter a valid server address") }
     val secure = url.protocol.equals("https", ignoreCase = true)
@@ -65,6 +72,21 @@ data class DeviceConfig(
 )
 
 /**
+ * The build the server currently publishes at /tracker.apk.
+ *
+ * [versionCode] is the only thing that decides whether this phone is behind:
+ * Android refuses an install whose versionCode is not higher than the installed
+ * one, so comparing versionName strings would offer installs that cannot happen.
+ */
+data class ReleaseInfo(
+    val versionName: String,
+    val versionCode: Int,
+    val sizeBytes: Long,
+    val sha256: String,
+    val downloadPath: String,
+)
+
+/**
  * Talks to the backend using the short-lived device token obtained during pairing.
  * The token is deliberately never a user credential: it can only read its own config
  * and upload GPS points.
@@ -78,6 +100,10 @@ class TrackerApi(private val context: Context) {
             connectTimeout = 10_000
             readTimeout = 15_000
             setRequestProperty("Authorization", "Bearer $token")
+            // Sent on every call; the server only consumes it on /api/device/config,
+            // where it keeps the dashboard's version label honest after an in-place
+            // update. It is display metadata, never a credential.
+            setRequestProperty("X-App-Version", BuildConfig.VERSION_NAME)
         }
     }
 
@@ -117,6 +143,54 @@ class TrackerApi(private val context: Context) {
      * settings). On success the server unlocks privileged on-phone actions for
      * a few minutes; the phone itself never decides what the password is.
      */
+    /**
+     * The build published at /tracker.apk, or `null` when nothing updatable is
+     * published (a fresh deployment, or an APK copied in without its sidecar).
+     * A failed check is a failure, never "you are up to date".
+     */
+    suspend fun latestRelease(): Result<ReleaseInfo?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = connection("/api/device/update")
+            if (request.responseCode == 404) {
+                null
+            } else {
+                if (request.responseCode !in 200..299) error("Unable to check for updates")
+                parseRelease(request.inputStream.bufferedReader().use { it.readText() })
+            }
+        }
+    }
+
+    /**
+     * Asks the server to authorize installing [versionCode]. The server answers 403
+     * until an administrator has verified the device admin password on this phone,
+     * and 409 if the published build changed since the check — its message is what
+     * the UI shows.
+     */
+    suspend fun authorizeUpdate(versionCode: Int): Result<ReleaseInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = connection("/api/device/update/authorize").apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+            request.outputStream.use { it.write(JSONObject().put("versionCode", versionCode).toString().toByteArray()) }
+            if (request.responseCode == 403) throw AdminVerificationRequiredException()
+            if (request.responseCode !in 200..299) error(request.errorMessage())
+            parseRelease(request.inputStream.bufferedReader().use { it.readText() })
+        }
+    }
+
+    private fun parseRelease(body: String): ReleaseInfo {
+        val row = JSONObject(body)
+        return ReleaseInfo(
+            versionName = row.getString("versionName"),
+            versionCode = row.getInt("versionCode"),
+            sizeBytes = row.optLong("sizeBytes", 0L),
+            sha256 = row.optString("sha256", ""),
+            downloadPath = row.optString("downloadPath", "/tracker.apk"),
+        )
+    }
+
     suspend fun verifyAdmin(password: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val request = connection("/api/device/verify-admin").apply {

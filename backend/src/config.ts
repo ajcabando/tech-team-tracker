@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
@@ -27,6 +27,23 @@ function readVersion(): string {
   return 'unknown';
 }
 
+/**
+ * Directory holding the published release APK and its `tracker.apk.json` sidecar.
+ *
+ * The backend image is built from ./backend, so the repository's apk/ directory
+ * is bind-mounted at /app/apk in Docker; `npm run dev` runs from backend/, where
+ * ../apk is the same directory. APK_DIR overrides both for unusual layouts.
+ */
+function readApkDir(): string {
+  const override = process.env.APK_DIR?.trim();
+  if (override) return resolve(override);
+  for (const candidate of ['apk', '../apk', '../../apk']) {
+    const directory = resolve(process.cwd(), candidate);
+    if (existsSync(directory)) return directory;
+  }
+  return resolve(process.cwd(), 'apk');
+}
+
 function int(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -47,6 +64,7 @@ export const config = {
     .map((value) => value.trim())
     .filter(Boolean),
   version: readVersion(),
+  apkDir: readApkDir(),
   defaults: {
     applicationName: process.env.DEFAULT_APPLICATION_NAME || 'COMPANY TRACKER',
     companyName: process.env.DEFAULT_COMPANY_NAME || 'COMPANY',

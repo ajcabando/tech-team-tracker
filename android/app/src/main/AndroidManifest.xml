@@ -10,6 +10,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--
+      Lets the admin-only in-app updater hand a downloaded, verified APK to the
+      system installer. This grants no silent installs: Android always shows its
+      own confirmation, and the administrator must also allow this app to install
+      unknown apps once. Only ever opened after the server authorizes an update.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!--
       Asks to be exempted from Doze battery optimisation. A location foreground
       service survives Doze on stock Android, but the standby bucket keeps
       ageing and several OEM skins (Samsung, Xiaomi, Huawei) will kill a
@@ -71,6 +78,21 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!--
+          Shares the downloaded APK with the system installer as a content:// URI
+          (a file:// URI in an install intent throws FileUriExposedException from
+          Android 7 on). Not exported: only a URI granted per install is readable.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

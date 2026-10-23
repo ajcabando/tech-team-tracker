@@ -57,6 +57,7 @@ pair=$(curl -fsS -X POST "$API_URL/api/devices/pairing-code" -H "Authorization: 
 device_id=$(printf '%s' "$pair" | json_value deviceId)
 code=$(printf '%s' "$pair" | json_value pairingCode)
 device_uuid=$(printf '%s' "$pair" | json_value deviceUuid)
+admin_password=$(printf '%s' "$pair" | json_value adminPassword)
 device=$(curl -fsS -X POST "$API_URL/api/devices/pair" -H 'Content-Type: application/json' -d "{\"code\":\"$code\",\"deviceUuid\":\"$device_uuid\",\"manufacturer\":\"E2E\",\"model\":\"Test\",\"androidVersion\":\"15\",\"appVersion\":\"0.2.0\"}")
 device_token=$(printf '%s' "$device" | json_value deviceToken)
 reuse_status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/devices/pair" -H 'Content-Type: application/json' -d "{\"code\":\"$code\",\"deviceUuid\":\"$device_uuid\"}")
@@ -66,6 +67,49 @@ test "$device_read_status" = 403 || fail "device tokens must not read technician
 device_config=$(curl -fsS "$API_URL/api/device/config" -H "Authorization: Bearer $device_token")
 test "$(printf '%s' "$device_config" | json_value deviceId)" = "$device_id" || fail "device config identity"
 test "$(printf '%s' "$device_config" | json_path "d['tracking']['stopTimeoutSeconds']")" -gt 0 || fail "device config tracking settings"
+
+echo "== in-app update gate =="
+# A phone may see that a newer signed APK is published, but it cannot install it
+# until an administrator has verified the device admin password against the
+# server. This is the rule the whole feature rests on.
+anon_update=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/device/update")
+test "$anon_update" = 401 || fail "update metadata must require a device token (got $anon_update)"
+
+update_status=$(curl -s -o /tmp/tracker-e2e-update.json -w '%{http_code}' "$API_URL/api/device/update" -H "Authorization: Bearer $device_token")
+case "$update_status" in
+  200) published_code=$(python3 -c "import json;print(json.load(open('/tmp/tracker-e2e-update.json'))['versionCode'])") ;;
+  404) published_code=""; echo "  ..   no APK is published; only the admin gate is exercised" ;;
+  *) fail "GET /api/device/update returned $update_status" ;;
+esac
+rm -f /tmp/tracker-e2e-update.json
+
+not_authorized=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"versionCode\":${published_code:-1}}")
+test "$not_authorized" = 403 || fail "install must be refused before admin verification (got $not_authorized)"
+
+wrong_password=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/verify-admin" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d '{"password":"definitely-not-the-password"}')
+test "$wrong_password" = 403 || fail "a wrong admin password must be 403 (got $wrong_password)"
+
+verified=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/verify-admin" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"password\":\"$admin_password\"}")
+test "$verified" = 200 || fail "the admin password from the pairing response must verify (got $verified)"
+
+if [ -n "$published_code" ]; then
+  authorized=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"versionCode\":$published_code}")
+  test "$authorized" = 200 || fail "an install should be authorized after admin verification (got $authorized)"
+
+  stale_code=$((published_code + 1))
+  stale=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"versionCode\":$stale_code}")
+  test "$stale" = 409 || fail "authorizing an unpublished build must be 409 (got $stale)"
+else
+  missing=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d '{"versionCode":1}')
+  test "$missing" = 404 || fail "with nothing published, a verified admin should get 404 (got $missing)"
+fi
+
+# The config call is the phone's heartbeat: it reports the running build so the
+# dashboard shows the new version after an in-place update instead of freezing
+# at whatever was recorded during pairing.
+curl -fsS "$API_URL/api/device/config" -H "Authorization: Bearer $device_token" -H 'X-App-Version: 0.3.6-e2e' >/dev/null
+reported_version=$(curl -fsS "$API_URL/api/devices/$device_id" -H "Authorization: Bearer $admin_token" | json_value appVersion)
+test "$reported_version" = "0.3.6-e2e" || fail "the config heartbeat must update the reported app version (got $reported_version)"
 
 echo "== GPS ingestion =="
 point_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
@@ -238,4 +282,4 @@ test "$status" = 401 || fail "a removed account must not be able to sign in (got
 status=$(http_status -X POST "$API_URL/api/auth/refresh" -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$u_refresh\"}")
 test "$status" = 401 || fail "a removed account's sessions must be revoked (got $status)"
 
-echo "E2E passed: health, setup state, auth + refresh (including concurrent single-use rotation), technician setup, single-use pairing, device-token isolation, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."
+echo "E2E passed: health, setup state, auth + refresh (including concurrent single-use rotation), technician setup, single-use pairing, device-token isolation, admin-gated in-app update metadata + install authorization, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."

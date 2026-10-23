@@ -204,9 +204,26 @@ built, not a string someone has to remember to update.
 
 ### Updating an already-paired phone
 
-Download the new build and install it over the old one, the same way. As long
-as the key matches and `versionCode` increased, the pairing and any queued GPS
-survive.
+Phones on 0.3.6 or later update themselves. Open the app, tap the settings icon,
+enter the device admin password (the one issued with the pairing code), and use
+**Software update → Download and install**. The phone asks
+`GET /api/device/update` what is published at `/tracker.apk`, downloads it,
+verifies its size and SHA-256, and hands it to Android's installer. The server
+authorizes the install only while that admin verification is live (it answers
+403 otherwise, and 409 if the published build changed), and records the result
+in the audit log as `device.update.authorize`.
+
+The first update is the exception: phones on 0.3.5 (`versionCode` 8) do not have
+the updater, so they must be updated once by hand — download the APK and install
+it over the old one as described above. From 0.3.6 on, the phone can do it.
+
+Each phone also needs the per-app **install unknown apps** grant for the tracker
+(Settings → Apps → Special app access → Install unknown apps → Tracker → Allow).
+The app opens that screen itself when the grant is missing.
+
+What survives an in-place update: the pairing, the server URL, the Room database
+and any GPS points queued offline. `PackageReplacedReceiver` restarts tracking as
+soon as the new build is installed, so a phone does not go quiet after an update.
 
 **Check before you roll out**, if you have the phone on USB:
 
@@ -223,6 +240,10 @@ scripts/preflight-update.sh path/to/new.apk --install
 
 It will refuse — before touching the device — if the phone is signed with a
 different key, or if the new build is not actually newer.
+
+Publishing with `scripts/publish-apk.sh` also writes `apk/tracker.apk.json`, the
+sidecar the updater reads. It is generated from the APK's own `aapt2` badging, so
+an in-app update can never offer a version the APK does not declare.
 
 ---
 

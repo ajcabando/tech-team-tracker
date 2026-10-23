@@ -54,37 +54,44 @@ if [ -n "$EXPECT" ]; then
 fi
 "${gate[@]}" || fail "preflight refused this APK — nothing was published"
 
-# --- 2. never go backwards ----------------------------------------------------
+# --- 2. read the version this build will advertise ----------------------------
+# The phone updater compares versionCode, so the value has to come from the APK
+# itself and not from the VERSION file: VERSION can legitimately be bumped before
+# a build is published, and Android refuses an install whose versionCode is not
+# higher than the one already on the phone. /api/device/update serves exactly the
+# sidecar written from these two numbers below.
+echo "== version =="
+aapt2="${AAPT2:-}"
+if [ -z "$aapt2" ]; then
+  for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk"; do
+    [ -n "$root" ] || continue
+    for c in "$root"/build-tools/*/aapt2; do [ -x "$c" ] && { aapt2="$c"; break 2; }; done
+  done
+fi
+[ -n "$aapt2" ] || fail "could not find aapt2 (set AAPT2 or ANDROID_HOME) — it is required to read the version this APK advertises"
+new_code="$("$aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
+new_name="$("$aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+[ -n "$new_code" ] && [ -n "$new_name" ] || fail "could not read versionCode/versionName from $APK"
+ok "versionCode=$new_code versionName=$new_name"
+
+# --- 3. never go backwards ----------------------------------------------------
 # Publishing an older build over a newer one produces a fleet that silently
 # downgrades on reinstall, and versionCodes going backwards is confusing to
 # debug from a phone.
 if [ -f "$TARGET" ] && [ "$FORCE" = "0" ]; then
   echo "== currently published =="
-  aapt2="${AAPT2:-}"
-  if [ -z "$aapt2" ]; then
-    for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk"; do
-      [ -n "$root" ] || continue
-      for c in "$root"/build-tools/*/aapt2; do [ -x "$c" ] && { aapt2="$c"; break 2; }; done
-    done
+  cur_code="$("$aapt2" dump badging "$TARGET" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
+  cur_name="$("$aapt2" dump badging "$TARGET" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+  note "published: versionCode=$cur_code versionName=$cur_name"
+  if [ -n "$cur_code" ] && [ "$new_code" -lt "$cur_code" ]; then
+    fail "this APK is versionCode $new_code but $new_name is already published at $cur_code. Refusing to downgrade; pass --force if that is really intended."
   fi
-  if [ -n "$aapt2" ]; then
-    cur_code="$("$aapt2" dump badging "$TARGET" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
-    cur_name="$("$aapt2" dump badging "$TARGET" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
-    new_code="$("$aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)"
-    new_name="$("$aapt2" dump badging "$APK" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
-    note "published: versionCode=$cur_code versionName=$cur_name"
-    if [ -n "$cur_code" ] && [ -n "$new_code" ] && [ "$new_code" -lt "$cur_code" ]; then
-      fail "this APK is versionCode $new_code but $new_name is already published at $cur_code. Refusing to downgrade; pass --force if that is really intended."
-    fi
-    if [ "$new_name" = "$cur_name" ] && [ "$new_code" = "$cur_code" ] && [ "$FORCE" = "0" ]; then
-      note "same version as the published build; republishing anyway"
-    fi
-  else
-    note "aapt2 not found, skipping the downgrade check"
+  if [ "$new_name" = "$cur_name" ] && [ "$new_code" = "$cur_code" ]; then
+    note "same version as the published build; republishing anyway"
   fi
 fi
 
-# --- 3. publish ---------------------------------------------------------------
+# --- 4. publish ---------------------------------------------------------------
 echo "== publish =="
 if [ "$DRY_RUN" = "1" ]; then
   note "--dry-run: nothing copied"
@@ -102,7 +109,19 @@ mv -f "$tmp" "$TARGET"
 trap - EXIT
 ok "published $(basename "$APK") -> apk/tracker.apk ($(du -h "$TARGET" | cut -f1))"
 
-# --- 4. verify what is actually being served ---------------------------------
+# The sidecar is what /api/device/update reads, and it is written from the APK's
+# own badging, never hand-edited. It lands after the APK so a phone can never be
+# offered a build whose bytes are not in place yet; both writes are atomic.
+sidecar="$APK_DIR/tracker.apk.json"
+sidecar_tmp="$(mktemp "$APK_DIR/.tracker.apk.json.XXXXXX")"
+trap 'rm -f "$sidecar_tmp"' EXIT
+printf '{"versionName":"%s","versionCode":%s}\n' "$new_name" "$new_code" > "$sidecar_tmp"
+chmod 644 "$sidecar_tmp"
+mv -f "$sidecar_tmp" "$sidecar"
+trap - EXIT
+ok "advertised to paired phones: $new_name (versionCode $new_code)"
+
+# --- 5. verify what is actually being served ---------------------------------
 if [ -n "$URL" ]; then
   echo "== verify =="
   served_code="$(curl -fsS -o /tmp/published.apk -w '%{http_code}' "$URL/tracker.apk" || true)"
@@ -126,4 +145,5 @@ else
 fi
 
 echo
-echo "Published. The dashboard's Download APK button now serves this build."
+echo "Published. The dashboard's Download APK button now serves this build, and"
+echo "paired phones on an older versionCode are offered it from their admin settings."

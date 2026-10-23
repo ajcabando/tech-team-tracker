@@ -18,5 +18,7 @@ graphify-out/
 # run (~13MB); the committed artefact is the docs/audit-mobile.md report.
 docs/screenshots/audit/
 
-# Signed release APK, served at /tracker.apk. Build artifact, not source.
+# Signed release APK, served at /tracker.apk, and the sidecar that describes it.
+# Both are build artifacts written by scripts/publish-apk.sh, not source.
 apk/tracker.apk
+apk/tracker.apk.json

@@ -8,7 +8,8 @@ import { auth, deviceAuth, durableDeviceAuth, roles, AuthedRequest, createDevice
 import { asyncHandler, audit, orgScope, paginate } from '../common';
 import { publish } from '../realtime';
 import { getTracking } from '../services/settings';
-import { rateLimit } from '../middleware/rateLimit';
+import { authorizeUpdate, readRelease } from '../services/release';
+import { bearerKey, rateLimit } from '../middleware/rateLimit';
 
 export const devicesRouter = Router();
 
@@ -19,6 +20,20 @@ export const devicesRouter = Router();
 devicesRouter.get('/api/device/config', rateLimit({ windowMs: 60_000, max: 120 }), durableDeviceAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const device = await db.device.findUnique({ where: { id: req.user!.id }, include: { technician: true } });
   if (!device) return res.status(404).json({ error: 'Device not found' });
+
+  // This call is the phone's heartbeat (on service start and every 15 minutes), so
+  // it also carries the build the phone is actually running. Without it the
+  // dashboard keeps showing the version recorded at pairing time forever after an
+  // in-place update. A malformed header is ignored: reporting is never an error.
+  const reportedVersion = z.string().max(20).regex(/^[0-9A-Za-z.\-]+$/).safeParse(req.headers['x-app-version']);
+  if (reportedVersion.success && reportedVersion.data !== device.appVersion) {
+    try {
+      await db.device.update({ where: { id: device.id }, data: { appVersion: reportedVersion.data } });
+    } catch (error) {
+      console.error('device-version-update-failed', error);
+    }
+  }
+
   const [tracking, branding] = await Promise.all([
     getTracking(device.organizationId),
     db.branding.findUnique({ where: { organizationId: device.organizationId } }),
@@ -225,7 +240,7 @@ devicesRouter.post('/api/devices/:id/pairing-code', auth, roles(UserRole.SUPERAD
 // privileged on-phone actions for ADMIN_UNLOCK_TTL_MS.
 // ---------------------------------------------------------------------------
 
-devicesRouter.post('/api/device/verify-admin', rateLimit({ windowMs: 10 * 60_000, max: 10 }), durableDeviceAuth, asyncHandler(async (req: AuthedRequest, res) => {
+devicesRouter.post('/api/device/verify-admin', rateLimit({ windowMs: 10 * 60_000, max: 10, key: bearerKey }), durableDeviceAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Password is required' });
   const device = await db.device.findUnique({ where: { id: req.user!.id } });
@@ -242,6 +257,44 @@ devicesRouter.post('/api/device/verify-admin', rateLimit({ windowMs: 10 * 60_000
   await db.device.update({ where: { id: device.id }, data: { adminUnlockedUntil: unlockedUntil } });
   await audit({ req, action: 'device.admin-verify', resource: 'Device', resourceId: device.id, organizationId: device.organizationId });
   res.json({ unlocked: true, unlockedUntil });
+}));
+
+// ---------------------------------------------------------------------------
+// In-app updates. The phone can see that a newer signed APK is published, but it
+// cannot install one until an administrator has proved the device admin password:
+// verify-admin sets adminUnlockedUntil, and authorize below requires that window
+// to still be live. Nothing here starts an install — Android always asks the user.
+// ---------------------------------------------------------------------------
+
+/** The build currently published at /tracker.apk, or 404 when there is none. */
+devicesRouter.get('/api/device/update', rateLimit({ windowMs: 60_000, max: 60, key: bearerKey }), durableDeviceAuth, asyncHandler(async (_req: AuthedRequest, res) => {
+  const release = await readRelease();
+  if (!release) return res.status(404).json({ error: 'No updatable release is published' });
+  res.json(release);
+}));
+
+/**
+ * Authorizes this phone to install the published build.
+ *
+ * 403 until the admin password has been verified on this device, 409 if the
+ * release was replaced since the phone checked, and an audit row either way. The
+ * response is the release the phone is allowed to download and install.
+ */
+devicesRouter.post('/api/device/update/authorize', rateLimit({ windowMs: 60_000, max: 20, key: bearerKey }), durableDeviceAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const parsed = z.object({ versionCode: z.number().int().positive() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'versionCode is required', issues: parsed.error.issues });
+
+  const device = await db.device.findUnique({ where: { id: req.user!.id } });
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+
+  const decision = authorizeUpdate(await readRelease(), device, parsed.data.versionCode);
+  if (!decision.ok) {
+    await audit({ req, action: 'device.update.authorize', resource: 'Device', resourceId: device.id, result: 'FAILED', organizationId: device.organizationId });
+    return res.status(decision.status).json({ error: decision.error });
+  }
+
+  await audit({ req, action: 'device.update.authorize', resource: 'Device', resourceId: device.id, organizationId: device.organizationId });
+  res.json(decision.release);
 }));
 
 /**
