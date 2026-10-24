@@ -41,6 +41,21 @@ if grep -qE "version: *'[0-9]+\.[0-9]+\.[0-9]+'" backend/src/config.ts; then
 fi
 ok "backend reads the VERSION file"
 
+# --- A local .env APP_VERSION override must still agree ------------------------
+# Colima cannot bind-mount a single file, so docker-compose.override.yml drops the
+# ./VERSION mount and relies on APP_VERSION in .env instead (AGENTS.md). That copy
+# is written by hand and silently goes stale after a bump, which makes the local
+# stack report "Build v0.3.5" while the repository is at 0.3.6. CI has no .env, so
+# this only fires on a developer machine.
+echo "== local env =="
+if [ -f .env ] && grep -qE '^[[:space:]]*APP_VERSION=' .env; then
+  env_version="$(sed -nE "s/^[[:space:]]*APP_VERSION=[\"']?([^\"']*)[\"']?[[:space:]]*$/\1/p" .env | tail -1)"
+  [ "$env_version" = "$VERSION" ] || fail "APP_VERSION in .env is '$env_version' but VERSION is '$VERSION' — update .env so the local stack reports the real build"
+  ok ".env APP_VERSION matches VERSION"
+else
+  echo "  ..   no APP_VERSION in .env (CI or file mount) — nothing to compare"
+fi
+
 # --- The APK, if one has been built ------------------------------------------
 # Optional: this runs in CI *after* the build, and locally you may only be
 # changing the version before rebuilding.

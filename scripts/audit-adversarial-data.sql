@@ -90,8 +90,14 @@ ON CONFLICT ("id") DO NOTHING;
 UPDATE "Branding" SET "companyName" = 'International Heavy Equipment and Field Services Group International'
 WHERE id = (SELECT id FROM "Branding" ORDER BY "applicationName" LIMIT 1);
 
--- An uncapped email, to overflow .kv on /about.
-UPDATE "User" SET email = 'bartholomew.featherstonehaugh@companydomain.com'
-WHERE id = (SELECT id FROM "User" ORDER BY email LIMIT 1);
+-- An uncapped email, to overflow .kv on /about — through the Support row, NOT
+-- the account you sign in with. Renaming the superadmin's address here was a
+-- real bug in this fixture: the audit signs in as ADMIN_EMAIL (admin@example.com
+-- by default) *after* loading it, so the very next login returned 401 and the
+-- gate could never run. The Support row uses the same `.kv` component and the
+-- same uncapped `z.string().email()`, so the layout stress is identical while
+-- the credentials stay intact.
+UPDATE "Branding" SET "supportEmail" = 'bartholomew.wolfgang.featherstonehaugh@companydomain-international.example'
+WHERE id = (SELECT id FROM "Branding" ORDER BY "applicationName" LIMIT 1);
 
 COMMIT;

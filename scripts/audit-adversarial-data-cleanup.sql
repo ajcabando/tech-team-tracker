@@ -21,10 +21,16 @@ DELETE FROM "Technician" WHERE id = 'ADV-TECH-0001';
 
 COMMIT;
 
--- Branding and the admin email are user-editable, so only revert them if they
--- still hold the fixture's exact values — never clobber a real edit.
+-- Branding is user-editable, so only revert it if it still holds the fixture's
+-- exact values — never clobber a real edit.
 UPDATE "Branding" SET "companyName" = 'IGREY CONNECT'
 WHERE "companyName" = 'International Heavy Equipment and Field Services Group International';
 
+UPDATE "Branding" SET "supportEmail" = NULL
+WHERE "supportEmail" = 'bartholomew.wolfgang.featherstonehaugh@companydomain-international.example';
+
+-- Recovery for a database that was put through the older fixture, which renamed
+-- the superadmin account it was about to sign in with. Kept because that leaves
+-- the stack unusable until it is undone.
 UPDATE "User" SET email = 'admin@example.com'
 WHERE email = 'bartholomew.featherstonehaugh@companydomain.com';
