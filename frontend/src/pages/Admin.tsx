@@ -23,16 +23,37 @@ type User = {
   lastLogin: string | null;
 };
 
+type AuditDetails = {
+  deviceName?: string;
+  versionName?: string;
+  versionCode?: number;
+  requestedVersionCode?: number;
+  status?: number;
+};
+
 type AuditEntry = {
   id: string;
   action: string;
   resource: string;
   resourceId: string | null;
   result: string;
+  details: AuditDetails | null;
   ipAddress: string | null;
   createdAt: string;
   user: { name: string; email: string } | null;
 };
+
+/** One line of context for actions that record structured details (currently APK installs). */
+function auditDetail(entry: AuditEntry): string {
+  if (!entry.details) return '';
+  const build =
+    typeof entry.details.versionName === 'string'
+      ? `v${entry.details.versionName}${typeof entry.details.versionCode === 'number' ? ` · code ${entry.details.versionCode}` : ''}`
+      : typeof entry.details.requestedVersionCode === 'number'
+        ? `requested code ${entry.details.requestedVersionCode}`
+        : '';
+  return [entry.details.deviceName, build].filter(Boolean).join(' · ');
+}
 
 const TABS = ['Organizations', 'Users', 'Audit log'] as const;
 const ROLES = ['ADMIN', 'MANAGER', 'DISPATCHER'] as const;
@@ -43,6 +64,7 @@ export function AdminPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [auditFilter, setAuditFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showOrg, setShowOrg] = useState(false);
@@ -51,13 +73,13 @@ export function AdminPage() {
   const [removingUser, setRemovingUser] = useState<User | null>(null);
   const [resettingUser, setResettingUser] = useState<User | null>(null);
 
-  const load = async () => {
+  const load = async (action = '') => {
     setLoading(true);
     try {
       const [orgs, userList, logs] = await Promise.all([
         api<Organization[]>('/api/organizations').catch(() => [] as Organization[]),
         api<User[]>('/api/users').catch(() => [] as User[]),
-        api<AuditEntry[]>('/api/audit-logs?limit=100').catch(() => [] as AuditEntry[]),
+        api<AuditEntry[]>(`/api/audit-logs?limit=100${action ? `&action=${encodeURIComponent(action)}` : ''}`).catch(() => [] as AuditEntry[]),
       ]);
       setOrganizations(orgs);
       setUsers(userList);
@@ -99,7 +121,7 @@ export function AdminPage() {
         <div className="row-actions">
           {tab === 'Organizations' && <button className="primary" onClick={() => setShowOrg(true)}>New organization</button>}
           {tab === 'Users' && <button className="primary" onClick={() => setShowUser(true)}>New user</button>}
-          <button className="outline" onClick={() => void load()}>Refresh</button>
+          <button className="outline" onClick={() => void load(auditFilter)}>Refresh</button>
         </div>
       }
     >
@@ -216,8 +238,25 @@ export function AdminPage() {
       )}
 
       {!loading && tab === 'Audit log' && (
-        <Card title={`${audit.length} recent entries`}>
-          {audit.length === 0 && <EmptyState title="No audit entries yet" />}
+        <Card
+          title={`${audit.length} recent entries`}
+          action={
+            <select
+              aria-label="Filter audit log"
+              value={auditFilter}
+              onChange={(event) => {
+                const value = event.target.value;
+                setAuditFilter(value);
+                void load(value);
+              }}
+              style={{ width: 'auto' }}
+            >
+              <option value="">All actions</option>
+              <option value="device.update.authorize">Device updates</option>
+            </select>
+          }
+        >
+          {audit.length === 0 && <EmptyState title={auditFilter ? 'No entries for this action' : 'No audit entries yet'} />}
           <div className="table-wrap cards-mobile">
             {audit.length > 0 && (
               <table className="data-table">
@@ -236,7 +275,10 @@ export function AdminPage() {
                     <tr key={entry.id}>
                       <td data-label="When">{shortDateTime(entry.createdAt)}</td>
                       <td data-label="User">{entry.user?.email ?? 'system'}</td>
-                      <td data-label="Action"><code>{entry.action}</code></td>
+                      <td data-label="Action">
+                        <code>{entry.action}</code>
+                        {auditDetail(entry) && <small>{auditDetail(entry)}</small>}
+                      </td>
                       <td data-label="Resource">{entry.resource}{entry.resourceId ? ` · ${entry.resourceId.slice(0, 8)}` : ''}</td>
                       <td data-label="Result"><Badge tone={entry.result === 'SUCCESS' ? 'good' : 'bad'}>{entry.result}</Badge></td>
                       <td data-label="IP">{entry.ipAddress ?? '—'}</td>

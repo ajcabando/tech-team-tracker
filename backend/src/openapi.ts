@@ -84,6 +84,7 @@ export const openApiDocument = {
     '/api/device/update': { get: operation('Published release metadata for the phone updater (device token)', ['devices'], true) },
     '/api/device/update/authorize': { post: operation('Authorize an in-app install after admin verification (device token)', ['devices'], true, json) },
     '/api/device/verify-admin': { post: operation('Verify the device admin password (device token)', ['devices'], true, json) },
+    '/api/releases/current': { get: operation('Published APK metadata for the dashboard', ['devices']) },
     '/api/locations/batch': { post: operation('Upload a batch of GPS points (device token)', ['locations'], true, json) },
     '/api/dashboard/live': { get: operation('Live device positions', ['dashboard']) },
     '/api/dashboard/summary': { get: operation('Dashboard counters', ['dashboard']) },

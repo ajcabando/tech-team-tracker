@@ -83,6 +83,17 @@ case "$update_status" in
 esac
 rm -f /tmp/tracker-e2e-update.json
 
+# The dashboard sees the same build through an admin session, and a device token
+# must never reach that view.
+dashboard_release=$(curl -fsS "$API_URL/api/releases/current" -H "Authorization: Bearer $admin_token")
+if [ -n "$published_code" ]; then
+  test "$(printf '%s' "$dashboard_release" | json_path "d['release']['versionCode']")" = "$published_code" || fail "dashboard release versionCode"
+else
+  test "$(printf '%s' "$dashboard_release" | json_path "d['release']")" = "None" || fail "dashboard should report no published release"
+fi
+device_release_status=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/api/releases/current" -H "Authorization: Bearer $device_token")
+test "$device_release_status" = 403 || fail "device tokens must not read the dashboard release endpoint (got $device_release_status)"
+
 not_authorized=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"versionCode\":${published_code:-1}}")
 test "$not_authorized" = 403 || fail "install must be refused before admin verification (got $not_authorized)"
 
@@ -99,6 +110,18 @@ if [ -n "$published_code" ]; then
   stale_code=$((published_code + 1))
   stale=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d "{\"versionCode\":$stale_code}")
   test "$stale" = 409 || fail "authorizing an unpublished build must be 409 (got $stale)"
+
+  # The filter must narrow to update rows and each row must say which build the
+  # phone asked for, or an admin cannot tell what was installed on which device.
+  filtered=$(curl -fsS "$API_URL/api/audit-logs?limit=50&action=device.update.authorize" -H "Authorization: Bearer $admin_token")
+  printf '%s' "$filtered" | python3 -c "
+import json,sys
+rows=json.load(sys.stdin)
+assert rows, 'expected device.update.authorize audit rows'
+assert all(row['action']=='device.update.authorize' for row in rows), 'the action filter leaked other rows'
+assert any((row.get('details') or {}).get('versionCode') == $published_code for row in rows), 'an authorized row must record the build'
+assert any((row.get('details') or {}).get('deviceName') for row in rows), 'a row must record the device name'
+" || fail "audit filter/details for device updates"
 else
   missing=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/api/device/update/authorize" -H "Authorization: Bearer $device_token" -H 'Content-Type: application/json' -d '{"versionCode":1}')
   test "$missing" = 404 || fail "with nothing published, a verified admin should get 404 (got $missing)"
@@ -282,4 +305,4 @@ test "$status" = 401 || fail "a removed account must not be able to sign in (got
 status=$(http_status -X POST "$API_URL/api/auth/refresh" -H 'Content-Type: application/json' -d "{\"refreshToken\":\"$u_refresh\"}")
 test "$status" = 401 || fail "a removed account's sessions must be revoked (got $status)"
 
-echo "E2E passed: health, setup state, auth + refresh (including concurrent single-use rotation), technician setup, single-use pairing, device-token isolation, admin-gated in-app update metadata + install authorization, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."
+echo "E2E passed: health, setup state, auth + refresh (including concurrent single-use rotation), technician setup, single-use pairing, device-token isolation, admin-gated in-app update metadata + install authorization (including audit filter and recorded build), dashboard release metadata, GPS upload, idempotency, live dashboard, auto trip detection, route, replay, reports, settings, audit, alerts, history-preserving device replacement, and guarded technician/device/organization/user-account removal."

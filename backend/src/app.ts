@@ -12,6 +12,7 @@ import { organizationsRouter } from './modules/organizations';
 import { usersRouter } from './modules/users';
 import { techniciansRouter } from './modules/technicians';
 import { devicesRouter } from './modules/devices';
+import { releasesRouter } from './modules/releases';
 import { locationsRouter } from './modules/locations';
 import { tripsRouter } from './modules/trips';
 import { reportsRouter } from './modules/reports';
@@ -44,6 +45,7 @@ export function createApp() {
   app.use(usersRouter);
   app.use(techniciansRouter);
   app.use(devicesRouter);
+  app.use(releasesRouter);
   app.use(locationsRouter);
   app.use(tripsRouter);
   app.use(reportsRouter);

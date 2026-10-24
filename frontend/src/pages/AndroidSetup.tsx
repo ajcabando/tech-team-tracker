@@ -2,7 +2,7 @@ import React from 'react';
 import { AppShell, Card } from '../components/ui';
 import { PhoneMockup, type MockScreen } from '../components/PhoneMockup';
 import { Link } from '../lib/router';
-import { useReleaseVersion } from '../lib/api';
+import { usePublishedRelease, useReleaseVersion } from '../lib/api';
 
 const steps: { title: string; body: string; mock: MockScreen; caption: string }[] = [
   {
@@ -34,6 +34,12 @@ const steps: { title: string; body: string; mock: MockScreen; caption: string }[
 export function AndroidSetupPage() {
   const serverUrl = window.location.origin;
   const release = useReleaseVersion();
+  const published = usePublishedRelease();
+  const serverVersion = release.replace(/^v/, '');
+  const publishedVersion = published.release?.versionName ?? '';
+  // The build served at /tracker.apk is what phones actually install, so it can
+  // lag behind a server version bump until an admin republishes it.
+  const publishedBehindServer = Boolean(serverVersion && publishedVersion && publishedVersion !== serverVersion);
 
   return (
     <AppShell
@@ -48,6 +54,25 @@ export function AndroidSetupPage() {
           <span>Server URL</span>
           <code>{serverUrl}</code>
         </div>
+        <div className="kv">
+          <span>Published APK</span>
+          <strong>
+            {published.loading
+              ? 'Checking…'
+              : published.failed
+                ? 'Could not check'
+                : published.release
+                  ? `v${published.release.versionName} · code ${published.release.versionCode}`
+                  : 'None published yet'}
+          </strong>
+        </div>
+        {publishedBehindServer && (
+          <p className="muted">
+            This server is on {release}, but /tracker.apk still serves v{publishedVersion}. Republish it with{' '}
+            <code>scripts/publish-apk.sh</code> before rolling out, so phones are offered the build that matches this
+            server.
+          </p>
+        )}
         <div className="row-actions" style={{ marginTop: 12 }}>
           <a className="primary as-button" href="/tracker.apk" download="tracker.apk">
             Download APK{release ? ` · ${release} signed` : ''}

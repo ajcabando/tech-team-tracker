@@ -289,11 +289,28 @@ devicesRouter.post('/api/device/update/authorize', rateLimit({ windowMs: 60_000,
 
   const decision = authorizeUpdate(await readRelease(), device, parsed.data.versionCode);
   if (!decision.ok) {
-    await audit({ req, action: 'device.update.authorize', resource: 'Device', resourceId: device.id, result: 'FAILED', organizationId: device.organizationId });
+    await audit({
+      req,
+      action: 'device.update.authorize',
+      resource: 'Device',
+      resourceId: device.id,
+      result: 'FAILED',
+      organizationId: device.organizationId,
+      // A refusal still records which device asked for which build, so a failed
+      // rollout is diagnosable after the fact.
+      details: { deviceName: device.deviceName, requestedVersionCode: parsed.data.versionCode, status: decision.status },
+    });
     return res.status(decision.status).json({ error: decision.error });
   }
 
-  await audit({ req, action: 'device.update.authorize', resource: 'Device', resourceId: device.id, organizationId: device.organizationId });
+  await audit({
+    req,
+    action: 'device.update.authorize',
+    resource: 'Device',
+    resourceId: device.id,
+    organizationId: device.organizationId,
+    details: { deviceName: device.deviceName, versionName: decision.release.versionName, versionCode: decision.release.versionCode },
+  });
   res.json(decision.release);
 }));
 

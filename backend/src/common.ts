@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { AuthedRequest } from './auth';
 import { db } from './db';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 
 /** Wrap async handlers so rejected promises reach the Express error middleware. */
 export function asyncHandler(handler: (req: AuthedRequest, res: Response, next: NextFunction) => unknown): RequestHandler {
@@ -23,13 +23,15 @@ type AuditInput = {
   resourceId?: string | null;
   result?: string;
   organizationId?: string | null;
+  /** Structured context the UI can render, e.g. which build an install approved. */
+  details?: Prisma.InputJsonValue;
 };
 
 /**
  * Persist an audit entry. Never pass secrets, passwords, or tokens as `action`
  * or `resourceId`; those values are stored verbatim.
  */
-export async function audit({ req, action, resource, resourceId, result = 'SUCCESS', organizationId }: AuditInput): Promise<void> {
+export async function audit({ req, action, resource, resourceId, result = 'SUCCESS', organizationId, details }: AuditInput): Promise<void> {
   try {
     await db.auditLog.create({
       data: {
@@ -38,6 +40,7 @@ export async function audit({ req, action, resource, resourceId, result = 'SUCCE
         action,
         resource,
         resourceId: resourceId ?? null,
+        ...(details === undefined ? {} : { details }),
         ipAddress: clientIp(req),
         result,
       },

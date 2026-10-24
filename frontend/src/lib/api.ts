@@ -217,6 +217,47 @@ export function fetchReleaseVersion(): Promise<string> {
   return versionPromise;
 }
 
+/**
+ * The build whose bytes are served at /tracker.apk.
+ *
+ * Distinct from `/health/version`, which reports the server's VERSION file: the
+ * published APK can lag behind a version bump until an administrator republishes
+ * it, and that gap is exactly what makes phones install an older build.
+ */
+export type PublishedRelease = {
+  versionName: string;
+  versionCode: number;
+  sizeBytes: number;
+  sha256: string;
+  downloadPath: string;
+};
+
+export function fetchPublishedRelease(): Promise<PublishedRelease | null> {
+  return api<{ release: PublishedRelease | null }>('/api/releases/current').then((data) => data.release ?? null);
+}
+
+export function usePublishedRelease(): { loading: boolean; release: PublishedRelease | null; failed: boolean } {
+  const [state, setState] = useState<{ loading: boolean; release: PublishedRelease | null; failed: boolean }>({
+    loading: true,
+    release: null,
+    failed: false,
+  });
+  useEffect(() => {
+    let active = true;
+    fetchPublishedRelease()
+      .then((release) => {
+        if (active) setState({ loading: false, release, failed: false });
+      })
+      .catch(() => {
+        if (active) setState({ loading: false, release: null, failed: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return state;
+}
+
 /** Prefixed for display, or an empty string while the value is still loading. */
 export function useReleaseVersion(): string {
   const [version, setVersion] = useState('');

@@ -315,6 +315,8 @@ model AuditLog {
   action         String
   resource       String
   resourceId     String?
+  /** Structured context for actions that need it (e.g. which build an install approved). */
+  details        Json?
   ipAddress      String?
   result         String
   createdAt      DateTime @default(now())
