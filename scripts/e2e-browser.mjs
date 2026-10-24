@@ -49,7 +49,7 @@ const CHROME_CANDIDATES = [
 
 /** Nav label -> page heading. */
 const PAGES = [
-  ['Live tracking', 'Live tracking'],
+  ['Dashboard', 'Dashboard'],
   ['Technicians', 'Technicians'],
   ['Devices', 'Devices'],
   ['Trips', 'Trip history'],
@@ -415,6 +415,21 @@ async function main() {
 
     // ------------------------------------------------------ 4. collapse toggle
     console.log('\n== 4. sidebar collapse toggle ==');
+    // The shell starts collapsed on viewports narrower than 1200px, and the
+    // headless window is narrower than that. Measure the desktop behaviour
+    // deliberately instead of inheriting the window size: set the desktop
+    // viewport, forget any stored preference, and reload so the shell mounts
+    // expanded. Otherwise "collapse" is really "expand" and every assertion
+    // below inverts.
+    await setViewport(VIEWPORTS.desktop);
+    await browser.evaluate(`localStorage.removeItem('tracker.sidebar')`, sessionId);
+    await browser.send('Page.reload', {}, sessionId);
+    await browser.waitFor(`!!document.querySelector('.collapse-toggle')`, sessionId, 10000);
+    await ensureHelpers();
+    check(
+      !(await browser.evaluate(`document.querySelector('.app').classList.contains('sidebar-collapsed')`, sessionId)),
+      'sidebar starts expanded on a desktop viewport',
+    );
     const widthOf = () => browser.evaluate(`Math.round(document.querySelector('aside.sidebar').getBoundingClientRect().width)`, sessionId);
     const hasToggle = await browser.waitFor(`!!document.querySelector('.collapse-toggle')`, sessionId, 6000);
     check(hasToggle, 'collapse toggle is present');
@@ -648,7 +663,12 @@ async function main() {
     expectingRefusal = false;
     const emptyOrgName = 'E2E Empty Org ' + RUN;
     await apiPost('/api/organizations', { name: emptyOrgName, slug: 'e2e-empty-' + RUN.toLowerCase() }, seededLogin.accessToken);
-    await goto(`${DASHBOARD_URL}/#/superadmin`, `document.querySelector('h1')?.textContent?.trim() === 'System administration'`);
+    // The console is already the current route, and navigating to the same URL is
+    // a same-document navigation: the page would keep the list it fetched on
+    // mount and never show the organization created a moment ago. Reload for real.
+    await browser.send('Page.reload', {}, sessionId);
+    await browser.waitFor(`document.querySelector('h1')?.textContent?.trim() === 'System administration'`, sessionId, 12000);
+    await ensureHelpers();
     check(
       await browser.waitFor(`!!window.__t.rowContaining(${JSON.stringify(emptyOrgName)})`, sessionId, 12000),
       'empty organization appears in the admin console',
@@ -675,7 +695,11 @@ async function main() {
     );
     check(Boolean(account.id), 'seeded a dispatcher account');
 
-    await goto(`${DASHBOARD_URL}/#/superadmin`, `document.querySelector('h1')?.textContent?.trim() === 'System administration'`);
+    // Same reason as above: the account list was fetched when the console mounted,
+    // before this account existed, so the tab must be fed by a fresh load.
+    await browser.send('Page.reload', {}, sessionId);
+    await browser.waitFor(`document.querySelector('h1')?.textContent?.trim() === 'System administration'`, sessionId, 12000);
+    await ensureHelpers();
     await browser.evaluate(`window.__t.clickText('.tabs button', 'Users')`, sessionId);
     check(
       await browser.waitFor(`!!window.__t.rowContaining(${JSON.stringify(accountEmail)})`, sessionId, 12000),
@@ -694,6 +718,9 @@ async function main() {
       await browser.waitFor(`!window.__t.rowContaining(${JSON.stringify(accountEmail)})`, sessionId, 15000),
       'the account is removed from the console',
     );
+    // Removing an account refetches the table, which unmounts it while loading.
+    // Wait for your own row to render again before asking whether it is protected.
+    await browser.waitFor(`!!window.__t.rowContaining(${JSON.stringify(ADMIN_EMAIL)})`, sessionId, 12000);
     const ownRow = await browser.evaluate(
       `(function () { var row = window.__t.rowContaining(${JSON.stringify(ADMIN_EMAIL)}); if (!row) return 'no-row'; var button = [].slice.call(row.querySelectorAll('button')).filter(function (b) { return b.textContent.toLowerCase().indexOf('remove') >= 0; })[0]; return button ? 'removable' : 'protected'; })()`,
       sessionId,
